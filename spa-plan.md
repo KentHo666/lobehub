@@ -29,14 +29,14 @@ LobeChat 前端已基本完成 React Router 迁移（231 文件），`src/libs/n
 
 将散落引用改为经 `src/envs/` 读取，便于后续统一替换：
 
-| 文件 | 当前 | 改为 |
-|---|---|---|
-| `src/services/python.ts:12-13` | `process.env.NEXT_PUBLIC_PYODIDE_INDEX_URL` | `pythonEnv.NEXT_PUBLIC_PYODIDE_INDEX_URL` |
-| `src/layout/AuthProvider/MarketAuth/MarketAuthProvider.tsx:169` | `process.env.NEXT_PUBLIC_MARKET_BASE_URL` | `appEnv.MARKET_BASE_URL`（新增到 appEnv） |
-| `src/components/Analytics/Desktop.tsx:9-14` | `process.env.NEXT_PUBLIC_DESKTOP_*` | 新增 `desktopAnalyticsEnv`，或合入 `analyticsEnv` |
-| `packages/const/src/version.ts:7` | `process.env.NEXT_PUBLIC_IS_DESKTOP_APP` | 保持（构建时常量，后续改 `VITE_*`） |
-| `packages/builtin-tool-group-management/src/const.ts:1` | 同上 | 同上 |
-| `packages/builtin-tool-gtd/src/const.ts:1` | 同上 | 同上 |
+| 文件                                                            | 当前                                        | 改为                                              |
+| --------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------- |
+| `src/services/python.ts:12-13`                                  | `process.env.NEXT_PUBLIC_PYODIDE_INDEX_URL` | `pythonEnv.NEXT_PUBLIC_PYODIDE_INDEX_URL`         |
+| `src/layout/AuthProvider/MarketAuth/MarketAuthProvider.tsx:169` | `process.env.NEXT_PUBLIC_MARKET_BASE_URL`   | `appEnv.MARKET_BASE_URL`（新增到 appEnv）         |
+| `src/components/Analytics/Desktop.tsx:9-14`                     | `process.env.NEXT_PUBLIC_DESKTOP_*`         | 新增 `desktopAnalyticsEnv`，或合入 `analyticsEnv` |
+| `packages/const/src/version.ts:7`                               | `process.env.NEXT_PUBLIC_IS_DESKTOP_APP`    | 保持（构建时常量，后续改 `VITE_*`）               |
+| `packages/builtin-tool-group-management/src/const.ts:1`         | 同上                                        | 同上                                              |
+| `packages/builtin-tool-gtd/src/const.ts:1`                      | 同上                                        | 同上                                              |
 
 ### 1.3 服务端 `NEXT_PUBLIC_MARKET_BASE_URL` 去前缀
 
@@ -88,17 +88,18 @@ export default defineConfig({
     alias: { '@': resolve(__dirname, 'src') },
   },
   define: {
-    __MOBILE__: JSON.stringify(isMobile),
+    '__MOBILE__': JSON.stringify(isMobile),
     'process.env.NEXT_PUBLIC_IS_DESKTOP_APP': JSON.stringify('0'),
   },
   plugins: [
-    react({ jsxImportSource: '@emotion/react' }),  // emotion 支持
+    react({ jsxImportSource: '@emotion/react' }), // emotion 支持
     // WASM 支持（Vite 原生）
   ],
 });
 ```
 
 构建命令：
+
 ```bash
 # Desktop bundle
 vite build
@@ -115,17 +116,19 @@ MOBILE=true vite build
 <!-- index.html -->
 <!DOCTYPE html>
 <html lang="<!--LOCALE-->" dir="<!--DIR-->">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!--SEO_META-->
-</head>
-<body>
-  <div id="root"></div>
-  <script>window.__SERVER_CONFIG__ = undefined; /* SERVER_CONFIG */</script>
-  <!--ANALYTICS_SCRIPTS-->
-  <script type="module" src="/src/entry.desktop.tsx"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--SEO_META-->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      window.__SERVER_CONFIG__ = undefined; /* SERVER_CONFIG */
+    </script>
+    <!--ANALYTICS_SCRIPTS-->
+    <script type="module" src="/src/entry.desktop.tsx"></script>
+  </body>
 </html>
 ```
 
@@ -138,7 +141,7 @@ MOBILE=true vite build
 import { BrowserRouter, Routes } from 'react-router-dom';
 import { renderRoutes } from '@/utils/router';
 import { desktopRoutes } from '@/app/[variants]/router/desktopRouter.config';
-import { SPAGlobalProvider } from '@/layout/SPAGlobalProvider';  // 新建，不修改现有 GlobalProvider
+import { SPAGlobalProvider } from '@/layout/SPAGlobalProvider'; // 新建，不修改现有 GlobalProvider
 
 const App = () => (
   <SPAGlobalProvider>
@@ -178,6 +181,7 @@ server: {
 4 文件引用 `next/link`（`Result.tsx`、`SearchResultItem.tsx`、`Loading.tsx`、`PageContent/index.tsx`）。
 
 **操作**：改为从 `react-router-dom` 导入 `Link`，或创建 adapter：
+
 ```tsx
 // packages/builtin-tool-web-browsing/src/client/Link.tsx
 export { Link } from 'react-router-dom';
@@ -194,11 +198,13 @@ export { Link } from 'react-router-dom';
 3 文件引用 `process.env.NEXT_PUBLIC_IS_DESKTOP_APP`。
 
 **操作**：Phase 2 中 Vite define 已处理。后续统一改为从共享 const 导入：
+
 ```ts
 // packages/const/src/version.ts
-export const isDesktop = typeof import.meta !== 'undefined'
-  ? import.meta.env?.VITE_IS_DESKTOP_APP === '1'
-  : process.env.NEXT_PUBLIC_IS_DESKTOP_APP === '1';  // 兼容 Next 后端
+export const isDesktop =
+  typeof import.meta !== 'undefined'
+    ? import.meta.env?.VITE_IS_DESKTOP_APP === '1'
+    : process.env.NEXT_PUBLIC_IS_DESKTOP_APP === '1'; // 兼容 Next 后端
 ```
 
 ### 3.4 `packages/utils/src/server/`
@@ -217,14 +223,14 @@ export const isDesktop = typeof import.meta !== 'undefined'
 
 现有导出 → 替换为：
 
-| 导出 | 替换 |
-|---|---|
-| `useRouter` | `react-router-dom` 的 `useNavigate` 封装（兼容 `.push()/.replace()/.back()` API） |
-| `usePathname` | `react-router-dom` 的 `useLocation().pathname` |
-| `useSearchParams` | `react-router-dom` 的 `useSearchParams` |
-| `useParams` | `react-router-dom` 的 `useParams` |
-| `redirect` | `react-router-dom` 的 `Navigate` 组件或 `useNavigate` |
-| `notFound` | 自定义 throw（SPA 内由 ErrorBoundary 捕获） |
+| 导出              | 替换                                                                              |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `useRouter`       | `react-router-dom` 的 `useNavigate` 封装（兼容 `.push()/.replace()/.back()` API） |
+| `usePathname`     | `react-router-dom` 的 `useLocation().pathname`                                    |
+| `useSearchParams` | `react-router-dom` 的 `useSearchParams`                                           |
+| `useParams`       | `react-router-dom` 的 `useParams`                                                 |
+| `redirect`        | `react-router-dom` 的 `Navigate` 组件或 `useNavigate`                             |
+| `notFound`        | 自定义 throw（SPA 内由 ErrorBoundary 捕获）                                       |
 
 **关键文件**：`src/libs/next/navigation.ts`
 
@@ -322,10 +328,12 @@ declare global {
 现状：`Analytics/index.tsx` 是 Server Component，读取 `analyticsEnv` 后传 props 给 client 组件。
 
 改为：从 `window.__SERVER_CONFIG__.analyticsConfig` 读取，各 analytics 组件改为纯客户端：
+
 - 移除 `next/script` 依赖 → 用 `useEffect` + `document.createElement('script')` 动态插入
 - 或使用 `react-helmet-async`
 
 **关键文件**：
+
 - 新增 `src/layout/SPAGlobalProvider/index.tsx`
 - 新增 `src/types/global.d.ts`（`Window.__SERVER_CONFIG__` + `__MOBILE__` 类型声明）
 - `src/store/serverConfig/Provider.tsx`
@@ -348,10 +356,10 @@ declare global {
 src/app/(spa)/[...path]/route.ts   # catch-all，优先级低于 (backend)/*
 ```
 
-**核心逻辑（dev / prod 分离）**：
+**核心逻辑（dev /prod 分离）**：
 
 - **prod**：读取 Vite 构建产物的 HTML string template（`dist/desktop/index.html` / `dist/mobile/index.html`），进行字符串替换后返回
-- **dev**：代理 Vite dev server（`fetch(VITE_DEV_ORIGIN)`），获取 HTML 后 rewrite 资源 URL 指向 Vite dev server origin（处理 script src、link href、inline module scripts、Worker 跨域）
+- **dev**：代理 Vite dev server（`fetch(VITE_DEV_ORIGIN)`），获取 HTML 后 rewrite 资源 URL 指向 Vite dev server origin（处理 script src、link href、inline module scripts）。**特别注意 Worker 跨域问题**：dev 模式下 Next.js 与 Vite dev server 不同源，`new Worker()` 无法直接加载跨域脚本，需注入 workerPatch（将跨域 URL 包装为 blob URL），参考 `catch-all.eg.ts` 中的实现
 
 ```ts
 // 伪代码
@@ -368,7 +376,8 @@ async function getTemplate(isMobile: boolean): Promise<string> {
 ```
 
 完整流程：
-1. 读取 UA → 选 desktop / mobile template
+
+1. 读取 UA → 选 desktop /mobile template
 2. 读取 cookie/headers → 解析 locale
 3. 调用 `getServerGlobalConfig()` → 构建 `SPAServerConfig`
 4. 安全序列化 + 正则替换 `window.__SERVER_CONFIG__` 占位
@@ -395,6 +404,7 @@ headers: {
 `src/libs/next/proxy/define-config.ts` 中的 SPA 路由白名单改为放行到 catch-all route（不再 rewrite 到 `[variants]`）。
 
 **关键文件**：
+
 - 新增 `src/app/(spa)/[...path]/route.ts`
 - 修改 `src/libs/next/proxy/define-config.ts`
 
@@ -407,6 +417,7 @@ headers: {
 ### 7.1 `(auth)` route group 保留 Next.js App Router
 
 `(auth)` 下的所有页面**不迁入 SPA**，保持为 Next.js App Router 页面。原因：
+
 - Auth 页面需要服务端能力（redirect、OIDC session lookup 等）
 - 现有 GlobalProvider 仍为这些页面服务
 
@@ -415,6 +426,7 @@ headers: {
 ### 7.2 Catch-All Route 排除 Auth 路径
 
 catch-all route 排除所有 auth 相关路径，让 Next.js App Router 正常接管：
+
 - `/signin`、`/signup`、`/auth-error`、`/reset-password`、`/verify-email`
 - `/oauth/consent/*`、`/oauth/callback/*`
 - `/market-auth-callback`
@@ -422,12 +434,14 @@ catch-all route 排除所有 auth 相关路径，让 Next.js App Router 正常�
 ### 7.3 Middleware auth 检查适配
 
 `betterAuthMiddleware` 的 session 检查对 SPA 路由需调整：
+
 - SPA 页面全量 public（HTML 本身无敏感数据）
 - 登录态检查由 SPA 内部 route guard 负责（SPAGlobalProvider 中的 AuthProvider/BetterAuthProvider）
 - `/api/*`、`/trpc/*`、`/oidc/*` 的鉴权保持不变
 - Auth 页面继续由 Next.js middleware 保护
 
 **关键文件**：
+
 - `src/app/[variants]/(auth)/` — 不动，保持 Next.js
 - `src/libs/next/proxy/define-config.ts` — 排除 auth 路径
 
@@ -435,17 +449,18 @@ catch-all route 排除所有 auth 相关路径，让 Next.js App Router 正常�
 
 ## Phase 8: 第三方依赖迁移
 
-| 依赖 | 用途 | 文件 | 迁移 |
-|---|---|---|---|
-| `nuqs/adapters/next/app` | Auth 页面 query state | `(auth)/layout.tsx` | Phase 7 已移除 |
-| `@vercel/speed-insights/next` | Vercel 性能监控 | `[variants]/layout.tsx` | 改用 `@vercel/speed-insights` 的 vanilla 版本，或移除 |
-| `next-mdx-remote/rsc` | MDX 渲染 | `src/components/mdx/index.tsx` | 改用 `@mdx-js/rollup`（Vite plugin）或运行时 MDX 解析 |
-| `@next/third-parties/google` | GA4 | `Analytics/Google.tsx` | 用 `<script>` 直接注入 gtag |
-| `react-scan/monitoring/next` | React 性能调试 | `Analytics/ReactScan.tsx` | 改用 `react-scan` 的通用版本 |
-| `@serwist/next` | PWA/Service Worker | `sw.ts` + `define-config.ts` | 改用 `vite-plugin-pwa`（Workbox 封装） |
-| `@t3-oss/env-nextjs` | 环境变量校验 | `src/envs/*.ts` | 改用 `@t3-oss/env-core`（框架无关版） |
+| 依赖                          | 用途                  | 文件                           | 迁移                                                  |
+| ----------------------------- | --------------------- | ------------------------------ | ----------------------------------------------------- |
+| `nuqs/adapters/next/app`      | Auth 页面 query state | `(auth)/layout.tsx`            | Phase 7 已移除                                        |
+| `@vercel/speed-insights/next` | Vercel 性能监控       | `[variants]/layout.tsx`        | 改用 `@vercel/speed-insights` 的 vanilla 版本，或移除 |
+| `next-mdx-remote/rsc`         | MDX 渲染              | `src/components/mdx/index.tsx` | 改用 `@mdx-js/rollup`（Vite plugin）或运行时 MDX 解析 |
+| `@next/third-parties/google`  | GA4                   | `Analytics/Google.tsx`         | 用 `<script>` 直接注入 gtag                           |
+| `react-scan/monitoring/next`  | React 性能调试        | `Analytics/ReactScan.tsx`      | 改用 `react-scan` 的通用版本                          |
+| `@serwist/next`               | PWA/Service Worker    | `sw.ts` + `define-config.ts`   | 改用 `vite-plugin-pwa`（Workbox 封装）                |
+| `@t3-oss/env-nextjs`          | 环境变量校验          | `src/envs/*.ts`                | 改用 `@t3-oss/env-core`（框架无关版）                 |
 
 **关键文件**：
+
 - `src/components/mdx/index.tsx`
 - `src/components/Analytics/*.tsx`
 - `src/envs/*.ts`（6 个文件）
@@ -478,7 +493,7 @@ dist/
   "build:spa:copy": "cp -r dist/* public/spa/",
   "build:docker": "bun run build:spa && bun run build:spa:copy && DOCKER=true next build --webpack",
   "dev:spa": "vite",
-  "dev": "bun run dev:spa"  // 默认开发命令改为 Vite
+  "dev": "bun run dev:spa", // 默认开发命令改为 Vite
 }
 ```
 
@@ -486,14 +501,14 @@ dist/
 
 ```dockerfile
 # builder stage
-RUN bun run build:spa          # 先构建两个 SPA bundle
+RUN bun run build:spa # 先构建两个 SPA bundle
 RUN cp -r dist/* public/spa/
-RUN bun run build:docker       # 再构建 Next.js（后端 + 托管）
+RUN bun run build:docker # 再构建 Next.js（后端 + 托管）
 ```
 
 ### 9.4 `robots.tsx` / `sitemap.tsx` / `manifest.ts`
 
-保留在 Next.js 中不变（属于后端/SEO 能力）。
+保留在 Next.js 中不变（属于后端 / SEO 能力）。
 
 **验证**：`bun run build:spa && bun run build:docker` 完成；Docker 镜像可运行；访问 `/agent` 返回 SPA 页面。
 
@@ -504,6 +519,7 @@ RUN bun run build:docker       # 再构建 Next.js（后端 + 托管）
 ### 10.1 删除旧前端壳（最小化变动）
 
 仅删除 `src/app/[variants]/` 下的 Next.js route segment 文件，**排除 `(auth)` 目录**：
+
 - 删除 `src/app/[variants]/page.tsx`、`layout.tsx`、`loading.tsx`、`metadata.ts` 等 route segment 文件
 - 删除 `src/app/[variants]/` 下其他非 `(auth)` 的 Next.js page/layout
 - **保留** `src/app/[variants]/(auth)/` 整个目录不动
@@ -524,6 +540,7 @@ RUN bun run build:docker       # 再构建 Next.js（后端 + 托管）
 ### 10.4 Desktop Electron 适配（本次不做）
 
 Desktop 构建流程暂保持不变，后续单独 PR 适配：
+
 - `scripts/electronWorkflow/modifiers/` 暂不改动
 - 确保本次迁移不破坏 desktop 构建的前提：`src/` 目录结构变化需要与 modifier 脚本的文件路径假设兼容
 - 若不兼容，在 Phase 10 前与 desktop 维护者沟通确认
@@ -534,18 +551,18 @@ Desktop 构建流程暂保持不变，后续单独 PR 适配：
 
 ### 每个 Phase 的验证
 
-| Phase | 验证方式 |
-|---|---|
-| 1 | `bun run type-check` 通过；功能回归无影响 |
-| 2 | `bun run dev:spa` 启动 Vite dev server，浏览器可见页面壳 |
-| 3 | SPA 工程能 import 所有 packages 并编译通过 |
-| 4 | SPA 中页面路由跳转正常，Link/Image/dynamic 替代品工作正常 |
-| 5 | SPA 启动后 Zustand store 正确初始化 serverConfig；user session 正常拉取 |
-| 6 | `next dev` 访问 `/agent` 返回注入后的 HTML，SPA 正常渲染 |
-| 7 | Auth 页面在 Next.js App Router 中正常工作；catch-all 正确排除 auth 路径 |
-| 8 | Analytics 脚本加载、MDX 渲染、PWA 安装正常 |
-| 9 | Docker 镜像构建成功；线上访问 SPA + API 均正常 |
-| 10 | 旧代码已删；`pnpm dev:spa` 为默认开发命令；desktop 构建正常 |
+| Phase | 验证方式                                                                |
+| ----- | ----------------------------------------------------------------------- |
+| 1     | `bun run type-check` 通过；功能回归无影响                               |
+| 2     | `bun run dev:spa` 启动 Vite dev server，浏览器可见页面壳                |
+| 3     | SPA 工程能 import 所有 packages 并编译通过                              |
+| 4     | SPA 中页面路由跳转正常，Link/Image/dynamic 替代品工作正常               |
+| 5     | SPA 启动后 Zustand store 正确初始化 serverConfig；user session 正常拉取 |
+| 6     | `next dev` 访问 `/agent` 返回注入后的 HTML，SPA 正常渲染                |
+| 7     | Auth 页面在 Next.js App Router 中正常工作；catch-all 正确排除 auth 路径 |
+| 8     | Analytics 脚本加载、MDX 渲染、PWA 安装正常                              |
+| 9     | Docker 镜像构建成功；线上访问 SPA + API 均正常                          |
+| 10    | 旧代码已删；`pnpm dev:spa` 为默认开发命令；desktop 构建正常             |
 
 ### 端到端验证
 
@@ -560,10 +577,11 @@ Desktop 构建流程暂保持不变，后续单独 PR 适配：
 
 1. **`process.env` 在 Vite 中不可用**：Vite 不注入 `process.env`，所有客户端代码中的 `process.env.*` 需改为 `import.meta.env.*` 或 `window.__SERVER_CONFIG__`。可通过 Vite define 提供兼容层，但建议逐步替换。
 2. **Emotion SSR**：当前 Next.js 有 `compiler.emotion` 支持。Vite 侧需配置 `@emotion/babel-plugin`（通过 `@vitejs/plugin-react` 的 `babel` 选项）。
-3. **i18n / locale 在 Vite 中需要独立实现**：Vite 不支持 Next.js 式的 `import()` 动态路径，需改用 `import.meta.glob` 静态分析。已有 Vite 版实现：
+3. **i18n /locale 在 Vite 中需要独立实现**：Vite 不支持 Next.js 式的 `import()` 动态路径，需改用 `import.meta.glob` 静态分析。已有 Vite 版实现：
    - `src/utils/locale.vite.ts` — antd locale 加载（`import.meta.glob` 读取 `antd/es/locale/*.js`）
    - `src/utils/i18n/loadI18nNamespaceModule.vite.ts` — i18n namespace 加载（`import.meta.glob` 读取 `locales/` 目录）
 
    Vite build 时需通过 alias 或条件导入将这些 `.vite.ts` 版本替换掉原版（如在 `vite.config.ts` 的 `resolve.alias` 中映射）。
+
 4. **Circular dependency**：现有 `pnpm circular` 检查需在 SPA 工程中同步验证。
-5. **Desktop Electron 构建**：本次不动 desktop，但需确保 `src/` 结构变化不破坏 modifier 脚本。删除 `src/app/[variants]/` 会导致 desktop modifier 失效——因此 Phase 10 清理需在 desktop 适配 PR 之后，或保留 `[variants]` 目录结构作为 desktop 构建入口直到 desktop 迁移完成。
+5. **Desktop Electron 构建**：本次不动 desktop，但需确保 `src/` 结构变化不破坏 modifier 脚本。删除 `src/app/[variants]/` 会导致 desktop modifier 失效 —— 因此 Phase 10 清理需在 desktop 适配 PR 之后，或保留 `[variants]` 目录结构作为 desktop 构建入口直到 desktop 迁移完成。
