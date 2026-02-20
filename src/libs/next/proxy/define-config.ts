@@ -19,6 +19,19 @@ import { createRouteMatcher } from './createRouteMatcher';
 const logDefault = debug('middleware:default');
 const logBetterAuth = debug('middleware:better-auth');
 
+// Auth/Next.js routes that must NOT go to SPA catch-all
+const nextjsOnlyRoutes = [
+  '/signin',
+  '/signup',
+  '/auth-error',
+  '/reset-password',
+  '/verify-email',
+  '/oauth',
+  '/market-auth-callback',
+  '/discover',
+  '/welcome',
+];
+
 export function defineConfig() {
   const backendApiEndpoints = ['/api', '/trpc', '/webapi', '/oidc'];
 
@@ -83,19 +96,7 @@ export function defineConfig() {
       url.port = process.env.PORT || '3210';
     }
 
-    // Auth routes that must stay in Next.js App Router (not SPA)
-    const nextjsRoutes = [
-      '/signin',
-      '/signup',
-      '/auth-error',
-      '/reset-password',
-      '/verify-email',
-      '/oauth',
-      '/market-auth-callback',
-      '/discover',
-      '/welcome',
-    ];
-    const isNextjsRoute = nextjsRoutes.some((r) => url.pathname.startsWith(r));
+    const isNextjsRoute = nextjsOnlyRoutes.some((r) => url.pathname.startsWith(r));
 
     // SPA routes pass through to (spa)/[[...path]]/route.ts catch-all
     if (!isNextjsRoute) {
@@ -196,6 +197,12 @@ export function defineConfig() {
     logBetterAuth('BetterAuth middleware processing request: %s %s', req.method, req.url);
 
     const response = defaultMiddleware(req);
+
+    // SPA routes are all public (HTML contains no sensitive data, auth is handled client-side)
+    const reqPath = new URL(req.url).pathname;
+    const isSpaRoute = !nextjsOnlyRoutes.some((r) => reqPath.startsWith(r))
+      && !backendApiEndpoints.some((r) => reqPath.startsWith(r));
+    if (isSpaRoute) return response;
 
     // when enable auth protection, only public route is not protected, others are all protected
     const isProtected = !isPublicRoute(req);
