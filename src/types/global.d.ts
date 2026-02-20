@@ -15,9 +15,13 @@ declare module 'styled-components' {
 
 declare global {
   interface Window {
+    __SERVER_CONFIG__: import('./spaServerConfig').SPAServerConfig | undefined;
     lobeEnv?: {
       darwinMajorVersion?: number;
       isMacTahoe?: boolean;
     };
   }
+
+  /** Vite define: current bundle is mobile variant */
+  const __MOBILE__: boolean;
 }
