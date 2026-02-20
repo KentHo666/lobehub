@@ -7,7 +7,7 @@ import { type BusinessSignupFomData } from '@/business/client/hooks/useBusinessS
 import { useBusinessSignup } from '@/business/client/hooks/useBusinessSignup';
 import { message } from '@/components/AntdStaticMethods';
 import { signUp } from '@/libs/better-auth/auth-client';
-import { useRouter, useSearchParams } from '@/libs/next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useServerConfigStore } from '@/store/serverConfig';
 import { serverConfigSelectors } from '@/store/serverConfig/selectors';
 
