@@ -248,6 +248,7 @@
     "@react-three/fiber": "^9.5.0",
     "@saintno/comfyui-sdk": "^0.2.49",
     "@serwist/next": "^9.5.0",
+    "@t3-oss/env-core": "^0.13.10",
     "@t3-oss/env-nextjs": "^0.13.10",
     "@tanstack/react-query": "^5.90.20",
     "@trpc/client": "^11.8.1",
