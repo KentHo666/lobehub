@@ -83,37 +83,44 @@ export function defineConfig() {
       url.port = process.env.PORT || '3210';
     }
 
-    // refs: https://github.com/lobehub/lobe-chat/pull/5866
-    // new handle segment rewrite: /${route}${originalPathname}
-    // / -> /zh-CN__0
-    // /discover -> /zh-CN__0/discover
-    // All SPA routes that use react-router-dom should be rewritten to just /${route}
-    const spaRoutes = [
-      '/chat',
-      '/agent',
-      '/group',
-      '/community',
-      '/resource',
-      '/eval',
-      '/page',
-      '/settings',
-      '/image',
-      '/labs',
-      '/changelog',
-      '/profile',
-      '/me',
-      '/desktop-onboarding',
-      '/onboarding',
-      '/share',
+    // Auth routes that must stay in Next.js App Router (not SPA)
+    const nextjsRoutes = [
+      '/signin',
+      '/signup',
+      '/auth-error',
+      '/reset-password',
+      '/verify-email',
+      '/oauth',
+      '/market-auth-callback',
+      '/discover',
+      '/welcome',
     ];
-    const isSpaRoute = spaRoutes.some((route) => url.pathname.startsWith(route));
+    const isNextjsRoute = nextjsRoutes.some((r) => url.pathname.startsWith(r));
 
-    let nextPathname: string;
-    if (isSpaRoute) {
-      nextPathname = `/${route}`;
-    } else {
-      nextPathname = `/${route}` + (url.pathname === '/' ? '' : url.pathname);
+    // SPA routes pass through to (spa)/[[...path]]/route.ts catch-all
+    if (!isNextjsRoute) {
+      logDefault('SPA route, passing through to catch-all: %s', url.pathname);
+
+      const response = NextResponse.next();
+
+      // If locale explicitly provided via query (?hl=), persist it in cookie
+      if (explicitlyLocale) {
+        const existingLocale = request.cookies.get(LOBE_LOCALE_COOKIE)?.value as Locales | undefined;
+        if (!existingLocale) {
+          response.cookies.set(LOBE_LOCALE_COOKIE, explicitlyLocale, {
+            maxAge: 60 * 60 * 24 * 90,
+            path: '/',
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production',
+          });
+        }
+      }
+
+      return response;
     }
+
+    // Next.js App Router routes: rewrite with variants prefix
+    const nextPathname = `/${route}` + (url.pathname === '/' ? '' : url.pathname);
     const nextURL = appEnv.MIDDLEWARE_REWRITE_THROUGH_LOCAL
       ? urlJoin(url.origin, nextPathname)
       : nextPathname;
