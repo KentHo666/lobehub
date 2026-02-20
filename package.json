@@ -347,6 +347,7 @@
     "react-hotkeys-hook": "^5.2.3",
     "react-i18next": "^16.5.3",
     "react-lazy-load": "^4.0.1",
+    "react-markdown": "^10.1.0",
     "react-pdf": "^10.3.0",
     "react-responsive": "^10.0.1",
     "react-rnd": "^10.5.2",
