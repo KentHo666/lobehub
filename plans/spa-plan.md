@@ -84,14 +84,12 @@ export default defineConfig({
   build: {
     outDir: isMobile ? 'dist/mobile' : 'dist/desktop',
   },
-  resolve: {
-    alias: { '@': resolve(__dirname, 'src') },
-  },
   define: {
     '__MOBILE__': JSON.stringify(isMobile),
     'process.env.NEXT_PUBLIC_IS_DESKTOP_APP': JSON.stringify('0'),
   },
   plugins: [
+    tsconfigPaths(),
     react({ jsxImportSource: '@emotion/react' }), // emotion 支持
     // WASM 支持（Vite 原生）
   ],
@@ -311,6 +309,7 @@ const SPAGlobalProvider: FC<PropsWithChildren> = ({ children }) => {
 
 ```ts
 // src/types/global.d.ts
+import 'vite/client'; // add this line
 import type { SPAServerConfig } from '@/types/spaServerConfig';
 
 declare global {
@@ -321,6 +320,7 @@ declare global {
   /** Vite define 注入，标识当前 bundle 是否为 mobile 版 */
   const __MOBILE__: boolean;
 }
+export {}; // add this line
 ```
 
 ### 5.3 Analytics 改造

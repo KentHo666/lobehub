@@ -1,5 +1,6 @@
-import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
@@ -13,18 +14,11 @@ export default defineConfig({
     },
   },
   define: {
-    __MOBILE__: JSON.stringify(isMobile),
+    '__MOBILE__': JSON.stringify(isMobile),
     'process.env.NEXT_PUBLIC_IS_DESKTOP_APP': JSON.stringify('0'),
   },
-  plugins: [
-    tsconfigPaths(),
-    react({ jsxImportSource: '@emotion/react' }),
-  ],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-    },
-  },
+  plugins: [tsconfigPaths(), react({ jsxImportSource: '@emotion/react' })],
+
   server: {
     port: 3011,
     proxy: {
