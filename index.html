@@ -1,11 +1,26 @@
 <!doctype html>
-<html lang="<!--LOCALE-->" dir="<!--DIR-->">
+<html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!--SEO_META-->
   </head>
   <body>
+    <script>
+      (function () {
+        var hl = new URLSearchParams(location.search).get('hl');
+        var m = document.cookie.match(/(?:^|;\s*)LOBE_LOCALE=([^;]*)/);
+        var cookie = m ? decodeURIComponent(m[1]) : '';
+        var locale = hl || cookie || navigator.language || 'en-US';
+        if (locale === 'auto') locale = navigator.language || 'en-US';
+        if (hl && !cookie) {
+          document.cookie = 'LOBE_LOCALE=' + encodeURIComponent(hl) + ';path=/;max-age=7776000;SameSite=Lax';
+        }
+        document.documentElement.lang = locale;
+        var rtl = ['ar', 'arc', 'dv', 'fa', 'ha', 'he', 'khw', 'ks', 'ku', 'ps', 'ur', 'yi'];
+        document.documentElement.dir = rtl.indexOf(locale.split('-')[0].toLowerCase()) >= 0 ? 'rtl' : 'ltr';
+      })();
+    </script>
     <div id="root"></div>
     <script>
       window.__SERVER_CONFIG__ = undefined; /* SERVER_CONFIG */
