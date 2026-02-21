@@ -19,18 +19,10 @@ export interface SPAClientEnv {
   s3FilePath?: string;
 }
 
-export interface SPAThemeConfig {
-  cdnUseGlobal?: boolean;
-  customFontFamily?: string;
-  customFontURL?: string;
-}
-
 export interface SPAServerConfig {
   analyticsConfig: AnalyticsConfig;
   clientEnv: SPAClientEnv;
   config: GlobalServerConfig;
   featureFlags: Partial<IFeatureFlags>;
   isMobile: boolean;
-  locale: string;
-  theme: SPAThemeConfig;
 }
