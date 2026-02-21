@@ -130,3 +130,4 @@ i18n-unused-keys-report.json
 .vitest-reports
 
 pnpm-lock.yaml
+.turbo

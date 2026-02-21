@@ -10,13 +10,14 @@ import { ReferralProvider } from '@/business/client/ReferralProvider';
 import { LobeAnalyticsProviderWrapper } from '@/components/Analytics/LobeAnalyticsProviderWrapper';
 import { DragUploadProvider } from '@/components/DragUploadZone/DragUploadProvider';
 import { isDesktop } from '@/const/version';
-import DevPanel from '@/features/DevPanel';
+// DevPanel uses node:fs (getCacheEntries) which is not available in browser/Vite
+// import DevPanel from '@/features/DevPanel';
 import AuthProvider from '@/layout/AuthProvider';
 import AppTheme from '@/layout/GlobalProvider/AppTheme';
 import { FaviconProvider } from '@/layout/GlobalProvider/FaviconProvider';
 import { GroupWizardProvider } from '@/layout/GlobalProvider/GroupWizardProvider';
 import ImportSettings from '@/layout/GlobalProvider/ImportSettings';
-import Locale from '@/layout/GlobalProvider/Locale';
+import Locale from './Locale';
 import NextThemeProvider from '@/layout/GlobalProvider/NextThemeProvider';
 import QueryProvider from '@/layout/GlobalProvider/Query';
 import ServerVersionOutdatedAlert from '@/layout/GlobalProvider/ServerVersionOutdatedAlert';
@@ -66,7 +67,7 @@ const SPAGlobalProvider = memo<PropsWithChildren>(({ children }) => {
               <Suspense>
                 {ENABLE_BUSINESS_FEATURES ? <ReferralProvider /> : null}
                 <ImportSettings />
-                {process.env.NODE_ENV === 'development' && <DevPanel />}
+                {/* DevPanel disabled in SPA: depends on node:fs */}
               </Suspense>
             </ServerConfigStoreProvider>
           </AppTheme>

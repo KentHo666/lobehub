@@ -13,6 +13,10 @@ const viteModuleRedirects: [string, string][] = [
   ['src/utils/locale.ts', 'src/utils/locale.vite.ts'],
   ['src/utils/i18n/loadI18nNamespaceModule.ts', 'src/utils/i18n/loadI18nNamespaceModule.vite.ts'],
   ['src/libs/getUILocaleAndResources.ts', 'src/libs/getUILocaleAndResources.vite.ts'],
+  ['src/components/mdx/Image.tsx', 'src/components/mdx/Image.vite.tsx'],
+  ['src/layout/AuthProvider/index.tsx', 'src/layout/AuthProvider/index.vite.tsx'],
+  ['src/components/Analytics/LobeAnalyticsProviderWrapper.tsx', 'src/components/Analytics/LobeAnalyticsProviderWrapper.vite.tsx'],
+  ['src/libs/next/navigation.ts', 'src/libs/next/navigation.vite.ts'],
 ].map(([from, to]) => [resolve(root, from), resolve(root, to)]);
 
 function viteModuleRedirect(): Plugin {
