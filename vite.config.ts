@@ -21,6 +21,20 @@ export default defineConfig({
   },
   plugins: [tsconfigPaths(), react({ jsxImportSource: '@emotion/react' })],
 
+  resolve: {
+    alias: {
+      '@/utils/locale': resolve(__dirname, 'src/utils/locale.vite.ts'),
+      '@/utils/i18n/loadI18nNamespaceModule': resolve(
+        __dirname,
+        'src/utils/i18n/loadI18nNamespaceModule.vite.ts',
+      ),
+      '@/libs/getUILocaleAndResources': resolve(
+        __dirname,
+        'src/libs/getUILocaleAndResources.vite.ts',
+      ),
+    },
+  },
+
   server: {
     port: 3011,
     proxy: {
