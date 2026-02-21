@@ -96,17 +96,26 @@ export function defineConfig() {
       url.port = process.env.PORT || '3210';
     }
 
+    // Direct access to /spa/ pre-rendered pages — pass through
+    if (url.pathname.startsWith('/spa/')) {
+      return NextResponse.next();
+    }
+
     const isNextjsRoute = nextjsOnlyRoutes.some((r) => url.pathname.startsWith(r));
 
-    // SPA routes pass through to (spa)/[[...path]]/route.ts catch-all
+    // SPA routes: rewrite to /spa/[locale]/[...path] catch-all
     if (!isNextjsRoute) {
-      logDefault('SPA route, passing through to catch-all: %s', url.pathname);
+      const spaPath = `/spa/${locale}${url.pathname === '/' ? '' : url.pathname}`;
+      logDefault('SPA route, rewriting to: %s', spaPath);
+      url.pathname = spaPath;
 
-      const response = NextResponse.next();
+      const response = NextResponse.rewrite(url);
 
       // If locale explicitly provided via query (?hl=), persist it in cookie
       if (explicitlyLocale) {
-        const existingLocale = request.cookies.get(LOBE_LOCALE_COOKIE)?.value as Locales | undefined;
+        const existingLocale = request.cookies.get(LOBE_LOCALE_COOKIE)?.value as
+          | Locales
+          | undefined;
         if (!existingLocale) {
           response.cookies.set(LOBE_LOCALE_COOKIE, explicitlyLocale, {
             maxAge: 60 * 60 * 24 * 90,
@@ -200,8 +209,10 @@ export function defineConfig() {
 
     // SPA routes are all public (HTML contains no sensitive data, auth is handled client-side)
     const reqPath = new URL(req.url).pathname;
-    const isSpaRoute = !nextjsOnlyRoutes.some((r) => reqPath.startsWith(r))
-      && !backendApiEndpoints.some((r) => reqPath.startsWith(r));
+    const isSpaRoute =
+      reqPath.startsWith('/spa/') ||
+      (!nextjsOnlyRoutes.some((r) => reqPath.startsWith(r)) &&
+        !backendApiEndpoints.some((r) => reqPath.startsWith(r)));
     if (isSpaRoute) return response;
 
     // when enable auth protection, only public route is not protected, others are all protected
