@@ -1,23 +1,30 @@
-import { type NextRequest } from 'next/server';
-import { isRtlLang } from 'rtl-detect';
+import { BRANDING_NAME, ORG_NAME } from '@lobechat/business-const';
+import { OG_URL } from '@lobechat/const';
 
 import { getServerFeatureFlagsValue } from '@/config/featureFlags';
-import { DEFAULT_LANG, LOBE_LOCALE_COOKIE } from '@/const/locale';
+import { OFFICIAL_URL } from '@/const/url';
+import { isCustomORG } from '@/const/version';
 import { analyticsEnv } from '@/envs/analytics';
 import { appEnv } from '@/envs/app';
 import { fileEnv } from '@/envs/file';
 import { pythonEnv } from '@/envs/python';
+import { locales } from '@/locales/resources';
 import { getServerGlobalConfig } from '@/server/globalConfig';
+import { translation } from '@/server/translation';
 import { serializeForHtml } from '@/server/utils/serializeForHtml';
 import {
   type AnalyticsConfig,
   type SPAClientEnv,
   type SPAServerConfig,
-  type SPAThemeConfig,
 } from '@/types/spaServerConfig';
-import { parseBrowserLanguage } from '@/utils/locale';
 
 import { desktopHtmlTemplate, mobileHtmlTemplate } from './spaHtmlTemplates';
+
+export const dynamic = 'force-static';
+
+export function generateStaticParams() {
+  return locales.map((locale) => ({ locale }));
+}
 
 const isDev = process.env.NODE_ENV === 'development';
 const VITE_DEV_ORIGIN = process.env.VITE_DEV_ORIGIN || 'http://localhost:3011';
@@ -76,10 +83,7 @@ async function getTemplate(isMobile: boolean): Promise<string> {
     return await rewriteViteAssetUrls(html);
   }
 
-  if (isMobile) {
-    return mobileHtmlTemplate;
-  }
-  return desktopHtmlTemplate;
+  return isMobile ? mobileHtmlTemplate : desktopHtmlTemplate;
 }
 
 function buildAnalyticsConfig(): AnalyticsConfig {
@@ -126,7 +130,10 @@ function buildAnalyticsConfig(): AnalyticsConfig {
     };
   }
 
-  if (process.env.NEXT_PUBLIC_DESKTOP_PROJECT_ID && process.env.NEXT_PUBLIC_DESKTOP_UMAMI_BASE_URL) {
+  if (
+    process.env.NEXT_PUBLIC_DESKTOP_PROJECT_ID &&
+    process.env.NEXT_PUBLIC_DESKTOP_UMAMI_BASE_URL
+  ) {
     config.desktop = {
       baseUrl: process.env.NEXT_PUBLIC_DESKTOP_UMAMI_BASE_URL,
       projectId: process.env.NEXT_PUBLIC_DESKTOP_PROJECT_ID,
@@ -134,14 +141,6 @@ function buildAnalyticsConfig(): AnalyticsConfig {
   }
 
   return config;
-}
-
-function buildThemeConfig(): SPAThemeConfig {
-  return {
-    cdnUseGlobal: appEnv.CDN_USE_GLOBAL,
-    customFontFamily: appEnv.CUSTOM_FONT_FAMILY,
-    customFontURL: appEnv.CUSTOM_FONT_URL,
-  };
 }
 
 function buildClientEnv(): SPAClientEnv {
@@ -153,18 +152,41 @@ function buildClientEnv(): SPAClientEnv {
   };
 }
 
-export async function GET(request: NextRequest) {
-  const ua = request.headers.get('user-agent') || '';
-  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+async function buildSeoMeta(locale: string): Promise<string> {
+  const { t } = await translation('metadata', locale);
+  const title = t('chat.title', { appName: BRANDING_NAME });
+  const description = t('chat.description', { appName: BRANDING_NAME });
 
-  const cookieLocale = request.cookies.get(LOBE_LOCALE_COOKIE)?.value;
-  const browserLanguage = parseBrowserLanguage(request.headers, DEFAULT_LANG);
-  const locale = cookieLocale || browserLanguage;
+  return [
+    `<title>${title}</title>`,
+    `<meta name="description" content="${description}" />`,
+    `<meta property="og:title" content="${title}" />`,
+    `<meta property="og:description" content="${description}" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:url" content="${OFFICIAL_URL}" />`,
+    `<meta property="og:image" content="${OG_URL}" />`,
+    `<meta property="og:site_name" content="${BRANDING_NAME}" />`,
+    `<meta property="og:locale" content="${locale}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${title}" />`,
+    `<meta name="twitter:description" content="${description}" />`,
+    `<meta name="twitter:image" content="${OG_URL}" />`,
+    `<meta name="twitter:site" content="${isCustomORG ? `@${ORG_NAME}` : '@lobehub'}" />`,
+  ].join('\n    ');
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ locale: string; path?: string[] }> },
+) {
+  const { locale } = await params;
+
+  // force-static: no request headers available, default to desktop
+  const isMobile = false;
 
   const serverConfig = await getServerGlobalConfig();
   const featureFlags = getServerFeatureFlagsValue();
   const analyticsConfig = buildAnalyticsConfig();
-  const theme = buildThemeConfig();
   const clientEnv = buildClientEnv();
 
   const spaConfig: SPAServerConfig = {
@@ -173,11 +195,7 @@ export async function GET(request: NextRequest) {
     config: serverConfig,
     featureFlags,
     isMobile,
-    locale,
-    theme,
   };
-
-  const dir = isRtlLang(locale) ? 'rtl' : 'ltr';
 
   let html = await getTemplate(isMobile);
 
@@ -186,16 +204,13 @@ export async function GET(request: NextRequest) {
     `window.__SERVER_CONFIG__ = ${serializeForHtml(spaConfig)};`,
   );
 
-  html = html.replace('<!--LOCALE-->', locale);
-  html = html.replace('<!--DIR-->', dir);
-  html = html.replace('<!--SEO_META-->', '');
+  const seoMeta = await buildSeoMeta(locale);
+  html = html.replace('<!--SEO_META-->', seoMeta);
   html = html.replace('<!--ANALYTICS_SCRIPTS-->', '');
 
   return new Response(html, {
     headers: {
-      'cache-control': 'private, no-cache, no-store, must-revalidate',
       'content-type': 'text/html; charset=utf-8',
-      'vary': 'Accept-Language, User-Agent, Cookie',
     },
   });
 }
