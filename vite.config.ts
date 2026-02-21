@@ -4,35 +4,30 @@ import react from '@vitejs/plugin-react';
 import { defineConfig, type Plugin } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
+import { viteNodeModuleStub } from './plugins/vite/nodeModuleStub';
+import { vitePlatformResolve } from './plugins/vite/platformResolve';
+
 const isMobile = process.env.MOBILE === 'true';
 const isDev = process.env.NODE_ENV !== 'production';
-
+const isElectron = process.env.DESKTOP_BUILD === 'true';
 const root = resolve(__dirname);
 
-const viteModuleRedirects: [string, string][] = [
-  ['src/utils/locale.ts', 'src/utils/locale.vite.ts'],
-  ['src/utils/i18n/loadI18nNamespaceModule.ts', 'src/utils/i18n/loadI18nNamespaceModule.vite.ts'],
-  ['src/libs/getUILocaleAndResources.ts', 'src/libs/getUILocaleAndResources.vite.ts'],
-  ['src/components/mdx/Image.tsx', 'src/components/mdx/Image.vite.tsx'],
-  ['src/layout/AuthProvider/index.tsx', 'src/layout/AuthProvider/index.vite.tsx'],
-  ['src/components/Analytics/LobeAnalyticsProviderWrapper.tsx', 'src/components/Analytics/LobeAnalyticsProviderWrapper.vite.tsx'],
-  ['src/libs/next/navigation.ts', 'src/libs/next/navigation.vite.ts'],
-].map(([from, to]) => [resolve(root, from), resolve(root, to)]);
+// Workspace package: force browser conditional export (bypassed by tsconfigPaths/pnpm symlink)
+const ssrfSafeFetchRedirect: [string, string] = [
+  resolve(root, 'packages/ssrf-safe-fetch/index.ts'),
+  resolve(root, 'packages/ssrf-safe-fetch/index.browser.ts'),
+];
 
-function viteModuleRedirect(): Plugin {
+function viteSsrfSafeFetchRedirect(): Plugin {
   return {
     enforce: 'pre',
-    name: 'vite-module-redirect',
+    name: 'vite-ssrf-safe-fetch-redirect',
     async resolveId(source, importer, options) {
-      if (source.includes('.vite')) return null;
-
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
       if (!resolved) return null;
 
       const cleanId = resolved.id.split('?')[0];
-      for (const [from, to] of viteModuleRedirects) {
-        if (cleanId === from) return to;
-      }
+      if (cleanId === ssrfSafeFetchRedirect[0]) return ssrfSafeFetchRedirect[1];
       return null;
     },
   };
@@ -48,9 +43,15 @@ export default defineConfig({
   },
   define: {
     '__MOBILE__': JSON.stringify(isMobile),
-    'process.env.NEXT_PUBLIC_IS_DESKTOP_APP': JSON.stringify('0'),
+    'process.env.NEXT_PUBLIC_IS_DESKTOP_APP': JSON.stringify(isElectron ? '1' : '0'),
   },
-  plugins: [viteModuleRedirect(), tsconfigPaths(), react({ jsxImportSource: '@emotion/react' })],
+  plugins: [
+    viteNodeModuleStub(),
+    vitePlatformResolve(isMobile ? 'mobile' : isElectron ? 'desktop' : 'web'),
+    viteSsrfSafeFetchRedirect(),
+    tsconfigPaths(),
+    react({ jsxImportSource: '@emotion/react' }),
+  ],
 
   server: {
     port: 3011,
