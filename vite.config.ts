@@ -5,8 +5,10 @@ import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 const isMobile = process.env.MOBILE === 'true';
+const isDev = process.env.NODE_ENV !== 'production';
 
 export default defineConfig({
+  base: isDev ? '/' : '/spa/',
   build: {
     outDir: isMobile ? 'dist/mobile' : 'dist/desktop',
     rollupOptions: {
