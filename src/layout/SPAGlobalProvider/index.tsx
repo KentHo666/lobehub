@@ -28,18 +28,15 @@ import type { SPAServerConfig } from '@/types/spaServerConfig';
 const SPAGlobalProvider = memo<PropsWithChildren>(({ children }) => {
   const serverConfig: SPAServerConfig | undefined = window.__SERVER_CONFIG__;
 
-  const locale = serverConfig?.locale ?? document.documentElement.lang ?? 'en-US';
-  const isMobile = serverConfig?.isMobile ?? typeof __MOBILE__ !== 'undefined' ? __MOBILE__ : false;
+  const locale = document.documentElement.lang || 'en-US';
+  const isMobile =
+    (serverConfig?.isMobile ?? typeof __MOBILE__ !== 'undefined') ? __MOBILE__ : false;
 
   return (
     <StyleRegistry>
       <Locale defaultLang={locale}>
         <NextThemeProvider>
-          <AppTheme
-            customFontFamily={serverConfig?.theme.customFontFamily}
-            customFontURL={serverConfig?.theme.customFontURL}
-            globalCDN={serverConfig?.theme.cdnUseGlobal}
-          >
+          <AppTheme>
             <ServerConfigStoreProvider
               featureFlags={serverConfig?.featureFlags}
               isMobile={isMobile}
@@ -55,9 +52,7 @@ const SPAGlobalProvider = memo<PropsWithChildren>(({ children }) => {
                       <DragUploadProvider>
                         <LazyMotion features={domMax}>
                           <TooltipGroup layoutAnimation={false}>
-                            <LobeAnalyticsProviderWrapper>
-                              {children}
-                            </LobeAnalyticsProviderWrapper>
+                            <LobeAnalyticsProviderWrapper>{children}</LobeAnalyticsProviderWrapper>
                           </TooltipGroup>
                           <ModalHost />
                           <ToastHost />
