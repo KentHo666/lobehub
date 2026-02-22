@@ -3,14 +3,13 @@ import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
 import { defineConfig } from 'vite';
-import tsconfigPaths from 'vite-tsconfig-paths';
 
-import { viteNodeModuleStub } from './plugins/vite/nodeModuleStub';
-import { vitePlatformResolve } from './plugins/vite/platformResolve';
+import { sharedRendererDefine, sharedRendererPlugins } from './plugins/vite/sharedRendererConfig';
 
 const isMobile = process.env.MOBILE === 'true';
 const isDev = process.env.NODE_ENV !== 'production';
 const isElectron = process.env.DESKTOP_BUILD === 'true';
+const platform = isMobile ? 'mobile' : isElectron ? 'desktop' : 'web';
 
 export default defineConfig({
   base: isDev ? '/' : '/spa/',
@@ -20,11 +19,7 @@ export default defineConfig({
       input: resolve(__dirname, 'index.html'),
     },
   },
-  define: {
-    '__MOBILE__': JSON.stringify(isMobile),
-    '__ELECTRON__': JSON.stringify(isElectron),
-    'process.env': '{}',
-  },
+  define: sharedRendererDefine({ isMobile, isElectron }),
   optimizeDeps: {
     include: [
       'react',
@@ -61,9 +56,7 @@ export default defineConfig({
     ],
   },
   plugins: [
-    viteNodeModuleStub(),
-    vitePlatformResolve(isMobile ? 'mobile' : isElectron ? 'desktop' : 'web'),
-    tsconfigPaths(),
+    ...sharedRendererPlugins({ platform }),
     isDev &&
       codeInspectorPlugin({
         bundler: 'vite',
@@ -74,6 +67,7 @@ export default defineConfig({
   ],
 
   server: {
+    cors: true,
     port: 3011,
     proxy: {
       '/api': 'http://localhost:3010',

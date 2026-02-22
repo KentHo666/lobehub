@@ -2,12 +2,10 @@ import react from '@vitejs/plugin-react';
 import dotenv from 'dotenv';
 import { defineConfig } from 'electron-vite';
 import { resolve } from 'node:path';
-import tsconfigPaths from 'vite-tsconfig-paths';
 
 import { getExternalDependencies } from './native-deps.config.mjs';
 
-import { viteNodeModuleStub } from '../../plugins/vite/nodeModuleStub';
-import { vitePlatformResolve } from '../../plugins/vite/platformResolve';
+import { sharedRendererDefine, sharedRendererPlugins } from '../../plugins/vite/sharedRendererConfig';
 
 dotenv.config();
 
@@ -76,14 +74,9 @@ export default defineConfig({
         input: resolve(__dirname, 'index.html'),
       },
     },
-    define: {
-      '__MOBILE__': 'false',
-      '__ELECTRON__': 'true',
-    },
+    define: sharedRendererDefine({ isMobile: false, isElectron: true }),
     plugins: [
-      viteNodeModuleStub(),
-      vitePlatformResolve('desktop'),
-      tsconfigPaths({ root: ROOT_DIR }),
+      ...sharedRendererPlugins({ platform: 'desktop', tsconfigRoot: ROOT_DIR }),
       react({ jsxImportSource: '@emotion/react' }),
     ],
     resolve: {
