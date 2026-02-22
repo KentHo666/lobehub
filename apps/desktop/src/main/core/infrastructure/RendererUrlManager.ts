@@ -9,7 +9,6 @@ import { createLogger } from '@/utils/logger';
 import { RendererProtocolManager } from './RendererProtocolManager';
 
 const logger = createLogger('core:RendererUrlManager');
-const devDefaultRendererUrl = 'http://localhost:3015';
 
 export class RendererUrlManager {
   private readonly rendererProtocolManager: RendererProtocolManager;
@@ -33,10 +32,16 @@ export class RendererUrlManager {
    * Configure renderer loading strategy for dev/prod
    */
   configureRendererLoader() {
-    if (isDev && !this.rendererStaticOverride) {
-      this.rendererLoadedUrl = devDefaultRendererUrl;
+    const electronRendererUrl = process.env['ELECTRON_RENDERER_URL'];
+
+    if (isDev && !this.rendererStaticOverride && electronRendererUrl) {
+      this.rendererLoadedUrl = electronRendererUrl;
       this.setupDevRenderer();
       return;
+    }
+
+    if (isDev && !this.rendererStaticOverride && !electronRendererUrl) {
+      logger.warn('Dev mode: ELECTRON_RENDERER_URL not set, falling back to protocol handler');
     }
 
     if (isDev && this.rendererStaticOverride) {
@@ -72,14 +77,14 @@ export class RendererUrlManager {
   };
 
   /**
-   * Development: use Next dev server directly
+   * Development: use electron-vite renderer dev server
    */
   private setupDevRenderer() {
-    logger.info('Development mode: renderer served from Next dev server, no protocol hook');
+    logger.info(`Development mode: renderer served from electron-vite dev server at ${this.rendererLoadedUrl}`);
   }
 
   /**
-   * Production: serve static Next export assets
+   * Production: serve static renderer assets via protocol handler
    */
   private setupProdRenderer() {
     this.rendererLoadedUrl = this.rendererProtocolManager.getRendererUrl();
