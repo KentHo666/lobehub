@@ -45,6 +45,35 @@ export function dynamicElement<P = NonNullable<unknown>>(
 }
 
 /**
+ * Helper function to create a lazy-loaded layout element for router configuration.
+ * Unlike dynamicElement (for pages), layouts use Outlet so children are rendered inside.
+ */
+export function dynamicLayout<P = NonNullable<unknown>>(
+  importFn: () => Promise<{ default: ComponentType<P> } | ComponentType<P>>,
+  debugId?: string,
+): ReactElement {
+  const LazyComponent = lazy(async () => {
+    // eslint-disable-next-line @next/next/no-assign-module-variable
+    const module = await importFn();
+    if (typeof module === 'function') {
+      return { default: module };
+    }
+    if ('default' in module) {
+      return module as { default: ComponentType<P> };
+    }
+    return { default: module as unknown as ComponentType<P> };
+  });
+
+  // @ts-ignore
+  return (
+    <Suspense fallback={<Loading debugId={debugId || 'dynamicLayout'} />}>
+      {/* @ts-ignore */}
+      <LazyComponent {...({} as P)} />
+    </Suspense>
+  );
+}
+
+/**
  * Error boundary component for React Router
  * Displays an error page and provides a reset function to navigate to a specific path
  *

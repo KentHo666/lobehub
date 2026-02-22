@@ -11,7 +11,7 @@
   "author": "LobeHub",
   "main": "./dist/main/index.js",
   "scripts": {
-    "build:main": "electron-vite build",
+    "build:main": "NODE_OPTIONS=--max-old-space-size=8192 electron-vite build",
     "build:run-unpack": "electron .",
     "dev": "electron-vite dev",
     "dev:static": "cross-env DESKTOP_RENDERER_STATIC=1 npm run dev",
