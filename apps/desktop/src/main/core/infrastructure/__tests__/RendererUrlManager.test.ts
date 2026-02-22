@@ -69,11 +69,13 @@ describe('RendererUrlManager', () => {
       const { RendererUrlManager } = await import('../RendererUrlManager');
       const manager = new RendererUrlManager();
 
-      mockPathExistsSync.mockImplementation((p: string) => p === '/mock/export/out/index.html');
+      mockPathExistsSync.mockImplementation(
+        (p: string) => p === '/mock/export/out/apps/desktop/index.html',
+      );
 
       const resolved = await manager.resolveRendererFilePath(new URL('app://renderer/settings'));
 
-      expect(resolved).toBe('/mock/export/out/index.html');
+      expect(resolved).toBe('/mock/export/out/apps/desktop/index.html');
     });
   });
 
