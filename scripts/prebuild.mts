@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { checkDeprecatedAuth } = require('./_shared/checkDeprecatedAuth.js');
 
-const isDesktop = process.env.NEXT_PUBLIC_IS_DESKTOP_APP === '1';
+const isDesktop = process.env.DESKTOP_BUILD === 'true';
 const isBundleAnalyzer = process.env.ANALYZE === 'true' && process.env.CI === 'true';
 const isServerDB = !!process.env.DATABASE_URL;
 

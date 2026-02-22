@@ -24,4 +24,7 @@ declare global {
 
   /** Vite define: current bundle is mobile variant */
   const __MOBILE__: boolean;
+
+  /** Vite define: current bundle is Electron desktop variant */
+  const __ELECTRON__: boolean | undefined;
 }

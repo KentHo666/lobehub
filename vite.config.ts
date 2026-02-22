@@ -21,7 +21,7 @@ export default defineConfig({
   },
   define: {
     '__MOBILE__': JSON.stringify(isMobile),
-    'process.env.NEXT_PUBLIC_IS_DESKTOP_APP': JSON.stringify(isElectron ? '1' : '0'),
+    '__ELECTRON__': JSON.stringify(isElectron),
   },
   plugins: [
     viteNodeModuleStub(),

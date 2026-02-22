@@ -20,7 +20,7 @@ dotenvExpand.expand(dotenv.config({ override: true, path: `.env.${env}.local` })
 
 const migrationsFolder = join(__dirname, '../../packages/database/migrations');
 
-const isDesktop = process.env.NEXT_PUBLIC_IS_DESKTOP_APP === '1';
+const isDesktop = process.env.DESKTOP_BUILD === 'true';
 
 const runMigrations = async () => {
   const { serverDB } = await import('../../packages/database/src/server');
