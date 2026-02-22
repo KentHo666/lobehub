@@ -103,9 +103,9 @@ export function defineConfig() {
 
     const isNextjsRoute = nextjsOnlyRoutes.some((r) => url.pathname.startsWith(r));
 
-    // SPA routes: rewrite to /spa/[locale]/[...path] catch-all
+    // SPA routes: rewrite to /spa/[variants]/[...path] catch-all
     if (!isNextjsRoute) {
-      const spaPath = `/spa/${locale}${url.pathname === '/' ? '' : url.pathname}`;
+      const spaPath = `/spa/${route}${url.pathname === '/' ? '' : url.pathname}`;
       logDefault('SPA route, rewriting to: %s', spaPath);
       url.pathname = spaPath;
 

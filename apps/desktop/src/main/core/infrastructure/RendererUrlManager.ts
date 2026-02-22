@@ -1,5 +1,6 @@
-import { pathExistsSync } from 'fs-extra';
 import { extname, join } from 'node:path';
+
+import { pathExistsSync } from 'fs-extra';
 
 import { rendererDir } from '@/const/dir';
 import { isDev } from '@/const/env';
@@ -9,6 +10,10 @@ import { createLogger } from '@/utils/logger';
 import { RendererProtocolManager } from './RendererProtocolManager';
 
 const logger = createLogger('core:RendererUrlManager');
+
+// Vite build with root=monorepo preserves input path structure,
+// so index.html ends up at apps/desktop/index.html in outDir.
+const SPA_ENTRY_HTML = join(rendererDir, 'apps', 'desktop', 'index.html');
 
 export class RendererUrlManager {
   private readonly rendererProtocolManager: RendererProtocolManager;
@@ -73,14 +78,16 @@ export class RendererUrlManager {
     }
 
     // All routes fallback to index.html (SPA)
-    return join(rendererDir, 'index.html');
+    return SPA_ENTRY_HTML;
   };
 
   /**
    * Development: use electron-vite renderer dev server
    */
   private setupDevRenderer() {
-    logger.info(`Development mode: renderer served from electron-vite dev server at ${this.rendererLoadedUrl}`);
+    logger.info(
+      `Development mode: renderer served from electron-vite dev server at ${this.rendererLoadedUrl}`,
+    );
   }
 
   /**

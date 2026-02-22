@@ -15,7 +15,7 @@ export const mobileHtmlTemplate = ${JSON.stringify(mobileHtml)};
 `;
 
 writeFileSync(
-  resolve(root, 'src/app/spa/[locale]/[[...path]]/spaHtmlTemplates.ts'),
+  resolve(root, 'src/app/spa/[variants]/[[...path]]/spaHtmlTemplates.ts'),
   output,
   'utf-8',
 );
