@@ -19,7 +19,7 @@ vi.mock('fs-extra', () => ({
 }));
 
 vi.mock('@/const/dir', () => ({
-  nextExportDir: '/mock/export/out',
+  rendererDir: '/mock/export/out',
 }));
 
 vi.mock('@/const/env', () => ({
@@ -55,7 +55,7 @@ describe('RendererUrlManager', () => {
       );
 
       const resolved = await manager.resolveRendererFilePath(
-        new URL('app://next/en-US__0__light.txt'),
+        new URL('app://renderer/en-US__0__light.txt'),
       );
 
       expect(resolved).toBe('/mock/export/out/en-US__0__light.txt');
@@ -64,7 +64,7 @@ describe('RendererUrlManager', () => {
     it('should fall back to index.html for app routes', async () => {
       mockPathExistsSync.mockImplementation((p: string) => p === '/mock/export/out/index.html');
 
-      const resolved = await manager.resolveRendererFilePath(new URL('app://next/settings'));
+      const resolved = await manager.resolveRendererFilePath(new URL('app://renderer/settings'));
 
       expect(resolved).toBe('/mock/export/out/index.html');
     });

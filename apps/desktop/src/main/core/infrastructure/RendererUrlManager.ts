@@ -1,7 +1,7 @@
 import { pathExistsSync } from 'fs-extra';
 import { extname, join } from 'node:path';
 
-import { nextExportDir } from '@/const/dir';
+import { rendererDir } from '@/const/dir';
 import { isDev } from '@/const/env';
 import { getDesktopEnv } from '@/env';
 import { createLogger } from '@/utils/logger';
@@ -18,7 +18,7 @@ export class RendererUrlManager {
 
   constructor() {
     this.rendererProtocolManager = new RendererProtocolManager({
-      nextExportDir,
+      rendererDir,
       resolveRendererFilePath: this.resolveRendererFilePath,
     });
 
@@ -56,58 +56,20 @@ export class RendererUrlManager {
 
   /**
    * Resolve renderer file path in production.
-   * Static assets map directly; app routes fall back to index.html.
+   * Static assets map directly; all routes fall back to index.html (SPA).
    */
   resolveRendererFilePath = async (url: URL): Promise<string | null> => {
     const pathname = url.pathname;
-    const normalizedPathname = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 
-    // Static assets should be resolved from root
-    if (
-      pathname.startsWith('/_next/') ||
-      pathname.startsWith('/static/') ||
-      pathname === '/favicon.ico' ||
-      pathname === '/manifest.json'
-    ) {
-      return this.resolveExportFilePath(pathname);
+    // Static assets: direct file mapping
+    if (pathname.startsWith('/assets/') || extname(pathname)) {
+      const filePath = join(rendererDir, pathname);
+      return pathExistsSync(filePath) ? filePath : null;
     }
 
-    // If the incoming path already contains an extension (like .html or .ico),
-    // treat it as a direct asset lookup.
-    const extension = extname(normalizedPathname);
-    if (extension) {
-      return this.resolveExportFilePath(pathname);
-    }
-
-    return this.resolveExportFilePath('/');
+    // All routes fallback to index.html (SPA)
+    return join(rendererDir, 'index.html');
   };
-
-  private resolveExportFilePath(pathname: string) {
-    // Normalize by removing leading/trailing slashes so extname works as expected
-    const normalizedPath = decodeURIComponent(pathname).replace(/^\/+/, '').replace(/\/$/, '');
-
-    if (!normalizedPath) return join(nextExportDir, 'index.html');
-
-    const basePath = join(nextExportDir, normalizedPath);
-    const ext = extname(normalizedPath);
-
-    // If the request explicitly includes an extension (e.g. html, ico, txt),
-    // treat it as a direct asset.
-    if (ext) {
-      return pathExistsSync(basePath) ? basePath : null;
-    }
-
-    const candidates = [`${basePath}.html`, join(basePath, 'index.html'), basePath];
-
-    for (const candidate of candidates) {
-      if (pathExistsSync(candidate)) return candidate;
-    }
-
-    const fallback404 = join(nextExportDir, '404.html');
-    if (pathExistsSync(fallback404)) return fallback404;
-
-    return null;
-  }
 
   /**
    * Development: use Next dev server directly
