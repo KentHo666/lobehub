@@ -17,6 +17,6 @@ export const getAntdLocale = async (lang?: string) => {
     throw new Error(`Unsupported antd locale: ${normalLang}`);
   }
 
-  const { default: locale } = await loadLocale();
-  return locale;
+  const mod = (await loadLocale()) as Record<string, unknown>;
+  return mod.default;
 };

@@ -1,5 +1,6 @@
 import 'antd-style';
 
+import { type IEditor } from '@lobehub/editor';
 import { type LobeCustomStylish, type LobeCustomToken } from '@lobehub/ui';
 import { type AntdToken } from 'antd-style/lib/types/theme';
 
@@ -17,6 +18,8 @@ declare module 'styled-components' {
 
 declare global {
   interface Window {
+    __CHAT_STORE__?: any;
+    __editor?: IEditor;
     __SERVER_CONFIG__: SPAServerConfig | undefined;
     lobeEnv?: {
       darwinMajorVersion?: number;

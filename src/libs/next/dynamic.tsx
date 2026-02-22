@@ -5,10 +5,10 @@
  *   const Comp = dynamic(() => import('./Foo'), { loading: () => <Spinner />, ssr: false });
  */
 
-import { type ComponentType, type ReactNode, Suspense, lazy } from 'react';
+import { type ComponentType, lazy, type ReactNode, Suspense } from 'react';
 
 export interface DynamicOptions<P = NonNullable<unknown>> {
-  loading?: () => ReactNode;
+  loading?: ((...args: any[]) => ReactNode) | undefined;
   ssr?: boolean;
 }
 
