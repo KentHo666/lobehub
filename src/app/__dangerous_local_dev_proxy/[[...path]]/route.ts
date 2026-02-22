@@ -33,7 +33,7 @@ const html = /* html */ `<!doctype html>
         'globalThis.Worker=function(u,o){' +
           'var h=typeof u==="string"?u:u instanceof URL?u.href:"";' +
           'if(h.startsWith("'+host+'")){' +
-            'var b=new Blob(["import \\\\\""+h+"\\\\\";"],{type:"application/javascript"});' +
+            'var b=new Blob(["import \\\\""+h+"\\\\";"],{type:"application/javascript"});' +
             'return new O(URL.createObjectURL(b),Object.assign({},o,{type:"module"}));' +
           '}return new O(u,o)};' +
         'globalThis.Worker.prototype=O.prototype;' +

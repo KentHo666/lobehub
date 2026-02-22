@@ -3,6 +3,8 @@ import 'antd-style';
 import { type LobeCustomStylish, type LobeCustomToken } from '@lobehub/ui';
 import { type AntdToken } from 'antd-style/lib/types/theme';
 
+import { type SPAServerConfig } from './spaServerConfig';
+
 declare module 'antd-style' {
   export interface CustomToken extends LobeCustomToken {}
 
@@ -15,7 +17,7 @@ declare module 'styled-components' {
 
 declare global {
   interface Window {
-    __SERVER_CONFIG__: import('./spaServerConfig').SPAServerConfig | undefined;
+    __SERVER_CONFIG__: SPAServerConfig | undefined;
     lobeEnv?: {
       darwinMajorVersion?: number;
       isMacTahoe?: boolean;
