@@ -2,15 +2,16 @@
 
 import { ConfigProvider } from 'antd';
 import dayjs from 'dayjs';
-import { type PropsWithChildren, memo, useEffect, useState } from 'react';
+import { memo, type PropsWithChildren, useEffect, useState } from 'react';
 import { isRtlLang } from 'rtl-detect';
 
+import Editor from '@/layout/GlobalProvider/Editor';
 import { createI18nNext } from '@/locales/create';
 import { getAntdLocale } from '@/utils/locale';
 
-import Editor from '@/layout/GlobalProvider/Editor';
-
-const dayjsLocaleLoaders = import.meta.glob<{ default: ILocale }>('/node_modules/dayjs/locale/*.js');
+const dayjsLocaleLoaders = import.meta.glob<{ default: ILocale }>(
+  '/node_modules/dayjs/locale/*.js',
+);
 
 const updateDayjs = async (lang: string) => {
   const locale = lang.toLowerCase() === 'en-us' ? 'en' : lang.toLowerCase();
