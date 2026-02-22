@@ -1,11 +1,14 @@
-import react from '@vitejs/plugin-react';
 import dotenv from 'dotenv';
 import { defineConfig } from 'electron-vite';
 import { resolve } from 'node:path';
 
 import { getExternalDependencies } from './native-deps.config.mjs';
 
-import { sharedRendererDefine, sharedRendererPlugins } from '../../plugins/vite/sharedRendererConfig';
+import {
+  sharedOptimizeDeps,
+  sharedRendererDefine,
+  sharedRendererPlugins,
+} from '../../plugins/vite/sharedRendererConfig';
 
 dotenv.config();
 
@@ -75,10 +78,8 @@ export default defineConfig({
       },
     },
     define: sharedRendererDefine({ isMobile: false, isElectron: true }),
-    plugins: [
-      ...sharedRendererPlugins({ platform: 'desktop', tsconfigRoot: ROOT_DIR }),
-      react({ jsxImportSource: '@emotion/react' }),
-    ],
+    optimizeDeps: sharedOptimizeDeps,
+    plugins: sharedRendererPlugins({ platform: 'desktop', tsconfigRoot: ROOT_DIR }),
     resolve: {
       alias: {},
     },
