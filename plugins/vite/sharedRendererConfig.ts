@@ -1,5 +1,3 @@
-import type { PluginOption } from 'vite';
-
 import react from '@vitejs/plugin-react';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
 import tsconfigPaths from 'vite-tsconfig-paths';
@@ -13,21 +11,20 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 interface SharedRendererOptions {
   platform: Platform;
-  tsconfigRoot?: string;
 }
 
-export function sharedRendererPlugins(options: SharedRendererOptions): PluginOption[] {
+export function sharedRendererPlugins(options: SharedRendererOptions) {
   return [
     viteNodeModuleStub(),
     vitePlatformResolve(options.platform),
-    tsconfigPaths(options.tsconfigRoot ? { root: options.tsconfigRoot } : undefined),
+    tsconfigPaths(),
     isDev &&
       codeInspectorPlugin({
         bundler: 'vite',
         exclude: [/\.(css|json)$/],
         hotKeys: ['altKey', 'ctrlKey'],
       }),
-    react({ jsxImportSource: '@emotion/react' }),
+    react(),
   ];
 }
 
@@ -56,7 +53,7 @@ export const sharedOptimizeDeps = {
     'i18next',
     'react-i18next',
     'dayjs',
-    'lodash-es',
+
     'ahooks',
     'motion/react',
 

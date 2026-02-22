@@ -2,13 +2,12 @@
 
 import { ConfigProvider } from 'antd';
 import dayjs from 'dayjs';
-import { type PropsWithChildren, memo, useEffect, useState } from 'react';
+import React, { memo, type PropsWithChildren, useEffect, useState } from 'react';
 import { isRtlLang } from 'rtl-detect';
 
+import Editor from '@/layout/GlobalProvider/Editor';
 import { createI18nNext } from '@/locales/create';
 import { getAntdLocale } from '@/utils/locale';
-
-import Editor from '@/layout/GlobalProvider/Editor';
 
 // eager: true — dayjs locale fully inlined at build time
 const dayjsLocaleModules = import.meta.glob<{ default: ILocale }>(

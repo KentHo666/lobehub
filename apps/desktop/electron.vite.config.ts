@@ -1,14 +1,33 @@
-import dotenv from 'dotenv';
-import { defineConfig } from 'electron-vite';
 import { resolve } from 'node:path';
 
-import { getExternalDependencies } from './native-deps.config.mjs';
+import dotenv from 'dotenv';
+import { defineConfig } from 'electron-vite';
+import type { PluginOption, ViteDevServer } from 'vite';
 
 import {
   sharedOptimizeDeps,
   sharedRendererDefine,
   sharedRendererPlugins,
 } from '../../plugins/vite/sharedRendererConfig';
+import { getExternalDependencies } from './native-deps.config.mjs';
+
+/**
+ * Rewrite `/` to `/apps/desktop/index.html` so the electron-vite dev server
+ * serves the desktop HTML entry when root is the monorepo root.
+ */
+function electronDesktopHtmlPlugin(): PluginOption {
+  return {
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((req, _res, next) => {
+        if (req.url === '/' || req.url === '/index.html') {
+          req.url = '/apps/desktop/index.html';
+        }
+        next();
+      });
+    },
+    name: 'electron-desktop-html',
+  };
+}
 
 dotenv.config();
 
@@ -70,18 +89,21 @@ export default defineConfig({
     },
   },
   renderer: {
-    root: __dirname,
+    root: ROOT_DIR,
     build: {
-      outDir: 'dist/renderer',
+      outDir: resolve(__dirname, 'dist/renderer'),
       rollupOptions: {
         input: resolve(__dirname, 'index.html'),
       },
     },
     define: sharedRendererDefine({ isMobile: false, isElectron: true }),
     optimizeDeps: sharedOptimizeDeps,
-    plugins: sharedRendererPlugins({ platform: 'desktop', tsconfigRoot: ROOT_DIR }),
+    plugins: [
+      electronDesktopHtmlPlugin(),
+      ...(sharedRendererPlugins({ platform: 'desktop' }) as PluginOption[]),
+    ],
     resolve: {
-      alias: {},
+      dedupe: ['react', 'react-dom'],
     },
   },
 });

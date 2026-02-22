@@ -10,21 +10,19 @@ import { ReferralProvider } from '@/business/client/ReferralProvider';
 import { LobeAnalyticsProviderWrapper } from '@/components/Analytics/LobeAnalyticsProviderWrapper';
 import { DragUploadProvider } from '@/components/DragUploadZone/DragUploadProvider';
 import { isDesktop } from '@/const/version';
-// DevPanel uses node:fs (getCacheEntries) which is not available in browser/Vite
-// import DevPanel from '@/features/DevPanel';
 import AuthProvider from '@/layout/AuthProvider';
 import AppTheme from '@/layout/GlobalProvider/AppTheme';
 import { FaviconProvider } from '@/layout/GlobalProvider/FaviconProvider';
 import { GroupWizardProvider } from '@/layout/GlobalProvider/GroupWizardProvider';
 import ImportSettings from '@/layout/GlobalProvider/ImportSettings';
-import Locale from './Locale';
 import NextThemeProvider from '@/layout/GlobalProvider/NextThemeProvider';
 import QueryProvider from '@/layout/GlobalProvider/Query';
 import ServerVersionOutdatedAlert from '@/layout/GlobalProvider/ServerVersionOutdatedAlert';
 import StoreInitialization from '@/layout/GlobalProvider/StoreInitialization';
-import StyleRegistry from '@/layout/GlobalProvider/StyleRegistry';
 import { ServerConfigStoreProvider } from '@/store/serverConfig/Provider';
 import type { SPAServerConfig } from '@/types/spaServerConfig';
+
+import Locale from './Locale';
 
 const SPAGlobalProvider = memo<PropsWithChildren>(({ children }) => {
   const serverConfig: SPAServerConfig | undefined = window.__SERVER_CONFIG__;
@@ -34,46 +32,44 @@ const SPAGlobalProvider = memo<PropsWithChildren>(({ children }) => {
     (serverConfig?.isMobile ?? typeof __MOBILE__ !== 'undefined') ? __MOBILE__ : false;
 
   return (
-    <StyleRegistry>
-      <Locale defaultLang={locale}>
-        <NextThemeProvider>
-          <AppTheme>
-            <ServerConfigStoreProvider
-              featureFlags={serverConfig?.featureFlags}
-              isMobile={isMobile}
-              serverConfig={serverConfig?.config}
-            >
-              <QueryProvider>
-                <AuthProvider>
-                  <StoreInitialization />
+    <Locale defaultLang={locale}>
+      <NextThemeProvider>
+        <AppTheme>
+          <ServerConfigStoreProvider
+            featureFlags={serverConfig?.featureFlags}
+            isMobile={isMobile}
+            serverConfig={serverConfig?.config}
+          >
+            <QueryProvider>
+              <AuthProvider>
+                <StoreInitialization />
 
-                  {isDesktop && <ServerVersionOutdatedAlert />}
-                  <FaviconProvider>
-                    <GroupWizardProvider>
-                      <DragUploadProvider>
-                        <LazyMotion features={domMax}>
-                          <TooltipGroup layoutAnimation={false}>
-                            <LobeAnalyticsProviderWrapper>{children}</LobeAnalyticsProviderWrapper>
-                          </TooltipGroup>
-                          <ModalHost />
-                          <ToastHost />
-                          <ContextMenuHost />
-                        </LazyMotion>
-                      </DragUploadProvider>
-                    </GroupWizardProvider>
-                  </FaviconProvider>
-                </AuthProvider>
-              </QueryProvider>
-              <Suspense>
-                {ENABLE_BUSINESS_FEATURES ? <ReferralProvider /> : null}
-                <ImportSettings />
-                {/* DevPanel disabled in SPA: depends on node:fs */}
-              </Suspense>
-            </ServerConfigStoreProvider>
-          </AppTheme>
-        </NextThemeProvider>
-      </Locale>
-    </StyleRegistry>
+                {isDesktop && <ServerVersionOutdatedAlert />}
+                <FaviconProvider>
+                  <GroupWizardProvider>
+                    <DragUploadProvider>
+                      <LazyMotion features={domMax}>
+                        <TooltipGroup layoutAnimation={false}>
+                          <LobeAnalyticsProviderWrapper>{children}</LobeAnalyticsProviderWrapper>
+                        </TooltipGroup>
+                        <ModalHost />
+                        <ToastHost />
+                        <ContextMenuHost />
+                      </LazyMotion>
+                    </DragUploadProvider>
+                  </GroupWizardProvider>
+                </FaviconProvider>
+              </AuthProvider>
+            </QueryProvider>
+            <Suspense>
+              {ENABLE_BUSINESS_FEATURES ? <ReferralProvider /> : null}
+              <ImportSettings />
+              {/* DevPanel disabled in SPA: depends on node:fs */}
+            </Suspense>
+          </ServerConfigStoreProvider>
+        </AppTheme>
+      </NextThemeProvider>
+    </Locale>
   );
 });
 

@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 
+import type { PluginOption } from 'vite';
 import { defineConfig } from 'vite';
 
 import {
@@ -23,7 +24,7 @@ export default defineConfig({
   },
   define: sharedRendererDefine({ isMobile, isElectron }),
   optimizeDeps: sharedOptimizeDeps,
-  plugins: sharedRendererPlugins({ platform }),
+  plugins: sharedRendererPlugins({ platform }) as PluginOption[],
 
   server: {
     cors: true,
