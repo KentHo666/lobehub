@@ -39,7 +39,6 @@
     "build:spa": "rm -rf public/spa && NODE_OPTIONS=--max-old-space-size=8192 vite build",
     "build:spa:copy": "mkdir -p public/spa && cp -r dist/desktop/assets dist/mobile/assets public/spa/ && tsx scripts/generateSpaTemplates.mts",
     "build:spa:mobile": "cross-env NODE_OPTIONS=--max-old-space-size=8192 MOBILE=true vite build",
-    "build:vercel": "tsx scripts/prebuild.mts && npm run lint:ts && npm run lint:style && npm run type-check:tsc && npm run lint:circular && cross-env NODE_OPTIONS=--max-old-space-size=6144 next build && npm run postbuild",
     "build-migrate-db": "bun run db:migrate",
     "build-sitemap": "tsx ./scripts/buildSitemapIndex/index.ts",
     "clean:node_modules": "bash -lc 'set -e; echo \"Removing all node_modules...\"; rm -rf node_modules; pnpm -r exec rm -rf node_modules; rm -rf apps/desktop/node_modules; echo \"All node_modules removed.\"'",
