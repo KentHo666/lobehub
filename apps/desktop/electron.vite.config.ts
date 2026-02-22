@@ -1,14 +1,21 @@
+import react from '@vitejs/plugin-react';
 import dotenv from 'dotenv';
 import { defineConfig } from 'electron-vite';
 import { resolve } from 'node:path';
+import tsconfigPaths from 'vite-tsconfig-paths';
 
 import { getExternalDependencies } from './native-deps.config.mjs';
+
+import { viteNodeModuleStub } from '../../plugins/vite/nodeModuleStub';
+import { vitePlatformResolve } from '../../plugins/vite/platformResolve';
 
 dotenv.config();
 
 const isDev = process.env.NODE_ENV === 'development';
 const updateChannel = process.env.UPDATE_CHANNEL;
-console.log(`[electron-vite.config.ts] Detected UPDATE_CHANNEL: ${updateChannel}`); // 添加日志确认
+const ROOT_DIR = resolve(__dirname, '../..');
+
+console.log(`[electron-vite.config.ts] Detected UPDATE_CHANNEL: ${updateChannel}`);
 
 export default defineConfig({
   main: {
@@ -59,6 +66,28 @@ export default defineConfig({
         '@': resolve(__dirname, 'src/main'),
         '~common': resolve(__dirname, 'src/common'),
       },
+    },
+  },
+  renderer: {
+    root: __dirname,
+    build: {
+      outDir: 'dist/renderer',
+      rollupOptions: {
+        input: resolve(__dirname, 'index.html'),
+      },
+    },
+    define: {
+      '__MOBILE__': 'false',
+      '__ELECTRON__': 'true',
+    },
+    plugins: [
+      viteNodeModuleStub(),
+      vitePlatformResolve('desktop'),
+      tsconfigPaths({ root: ROOT_DIR }),
+      react({ jsxImportSource: '@emotion/react' }),
+    ],
+    resolve: {
+      alias: {},
     },
   },
 });
