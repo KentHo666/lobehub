@@ -19,7 +19,7 @@ export default defineConfig({
   build: {
     outDir: isMobile ? 'dist/mobile' : 'dist/desktop',
     rollupOptions: {
-      input: resolve(__dirname, 'index.html'),
+      input: resolve(__dirname, isMobile ? 'index.mobile.html' : 'index.html'),
     },
   },
   define: sharedRendererDefine({ isMobile, isElectron }),
