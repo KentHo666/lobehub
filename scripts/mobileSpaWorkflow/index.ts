@@ -22,7 +22,7 @@ function requireEnv(name: string): string {
 }
 
 async function main() {
-  const publicDomain = requireEnv('MOBILE_S3_PUBLIC_DOMAIN');
+  const publicDomain = new URL(requireEnv('MOBILE_S3_PUBLIC_DOMAIN')).origin;
   const keyPrefix = (process.env.MOBILE_S3_KEY_PREFIX || 'mobile/latest').replaceAll(
     /^\/+|\/+$/g,
     '',
