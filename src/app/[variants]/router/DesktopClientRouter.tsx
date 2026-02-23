@@ -29,7 +29,7 @@ const DesktopOnboardingRedirect = () => {
 
 const ClientRouter = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={window.__DEBUG_PROXY__ ? '/__dangerous_local_dev_proxy' : undefined}>
       <Routes>{renderRoutes(desktopRoutes)}</Routes>
       {isDesktop && <DesktopOnboardingRedirect />}
     </BrowserRouter>
