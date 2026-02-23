@@ -99,11 +99,6 @@ export function defineConfig() {
       url.port = process.env.PORT || '3210';
     }
 
-    // Direct access to /spa/ pre-rendered pages — pass through
-    if (url.pathname.startsWith('/spa/')) {
-      return NextResponse.next();
-    }
-
     if (
       url.pathname === dangerousLocalDevProxyRoute ||
       url.pathname.startsWith(`${dangerousLocalDevProxyRoute}/`)
@@ -217,14 +212,6 @@ export function defineConfig() {
     logBetterAuth('BetterAuth middleware processing request: %s %s', req.method, req.url);
 
     const response = defaultMiddleware(req);
-
-    // SPA routes are all public (HTML contains no sensitive data, auth is handled client-side)
-    const reqPath = new URL(req.url).pathname;
-    const isSpaRoute =
-      reqPath.startsWith('/spa/') ||
-      (!nextjsOnlyRoutes.some((r) => reqPath.startsWith(r)) &&
-        !backendApiEndpoints.some((r) => reqPath.startsWith(r)));
-    if (isSpaRoute) return response;
 
     // when enable auth protection, only public route is not protected, others are all protected
     const isProtected = !isPublicRoute(req);
