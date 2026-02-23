@@ -1,10 +1,10 @@
 import './initialize';
 
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Routes } from 'react-router-dom';
+import { RouterProvider } from 'react-router-dom';
 
 import SPAGlobalProvider from '@/layout/SPAGlobalProvider';
-import { renderRoutes } from '@/utils/router';
+import { createAppRouter } from '@/utils/router';
 
 import { desktopRoutes } from './app/[variants]/router/desktopRouter.config';
 
@@ -14,12 +14,10 @@ const basename =
     ? debugProxyBase
     : undefined;
 
-const App = () => (
-  <SPAGlobalProvider>
-    <BrowserRouter basename={basename}>
-      <Routes>{renderRoutes(desktopRoutes)}</Routes>
-    </BrowserRouter>
-  </SPAGlobalProvider>
-);
+const router = createAppRouter(desktopRoutes, { basename });
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <SPAGlobalProvider>
+    <RouterProvider router={router} />
+  </SPAGlobalProvider>,
+);

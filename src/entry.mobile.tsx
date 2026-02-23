@@ -1,19 +1,17 @@
 import './initialize';
 
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Routes } from 'react-router-dom';
+import { RouterProvider } from 'react-router-dom';
 
 import SPAGlobalProvider from '@/layout/SPAGlobalProvider';
-import { renderRoutes } from '@/utils/router';
+import { createAppRouter } from '@/utils/router';
 
 import { mobileRoutes } from './app/[variants]/(mobile)/router/mobileRouter.config';
 
-const App = () => (
-  <SPAGlobalProvider>
-    <BrowserRouter>
-      <Routes>{renderRoutes(mobileRoutes)}</Routes>
-    </BrowserRouter>
-  </SPAGlobalProvider>
-);
+const router = createAppRouter(mobileRoutes);
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <SPAGlobalProvider>
+    <RouterProvider router={router} />
+  </SPAGlobalProvider>,
+);
