@@ -14,6 +14,43 @@
     </style>
     <script>
       (function () {
+        function supportsImportMaps() {
+          return (
+            typeof HTMLScriptElement !== 'undefined' &&
+            typeof HTMLScriptElement.supports === 'function' &&
+            HTMLScriptElement.supports('importmap')
+          );
+        }
+
+        function supportsCascadeLayers() {
+          var el = document.createElement('div');
+          el.className = '__layer_test__';
+          el.style.position = 'absolute';
+          el.style.left = '-99999px';
+          el.style.top = '-99999px';
+
+          var style = document.createElement('style');
+          style.textContent =
+            '@layer a, b;' +
+            '@layer a { .__layer_test__ { color: rgb(1, 2, 3); } }' +
+            '@layer b { .__layer_test__ { color: rgb(4, 5, 6); } }';
+
+          document.documentElement.append(style);
+          document.documentElement.append(el);
+
+          var color = getComputedStyle(el).color;
+
+          el.remove();
+          style.remove();
+
+          return color === 'rgb(4, 5, 6)';
+        }
+
+        if (!(supportsImportMaps() && supportsCascadeLayers())) {
+          window.location.href = '/not-compatible.html';
+          return;
+        }
+
         var theme = 'system';
         try {
           theme = localStorage.getItem('theme') || 'system';

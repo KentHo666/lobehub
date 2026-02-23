@@ -1,26 +1,17 @@
+import { execSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
 import * as dotenv from 'dotenv';
 import dotenvExpand from 'dotenv-expand';
-import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // Use createRequire for CommonJS module compatibility
 const require = createRequire(import.meta.url);
 const { checkDeprecatedAuth } = require('./_shared/checkDeprecatedAuth.js');
 
-const isDesktop = process.env.DESKTOP_BUILD === 'true';
-const isBundleAnalyzer = process.env.ANALYZE === 'true' && process.env.CI === 'true';
 const isServerDB = !!process.env.DATABASE_URL;
 
-if (isDesktop) {
-  dotenvExpand.expand(dotenv.config({ path: '.env.desktop' }));
-  dotenvExpand.expand(dotenv.config({ override: true, path: '.env.desktop.local' }));
-} else {
-  dotenvExpand.expand(dotenv.config());
-}
+dotenvExpand.expand(dotenv.config());
 
 const AUTH_SECRET_DOC_URL =
   'https://lobehub.com/docs/self-hosting/environment-variables/auth#auth-secret';
@@ -31,7 +22,7 @@ const KEY_VAULTS_SECRET_DOC_URL =
  * Check for required environment variables in server database mode
  */
 const checkRequiredEnvVars = () => {
-  if (isDesktop || !isServerDB) return;
+  if (!isServerDB) return;
 
   const missingVars: { docUrl: string; name: string }[] = [];
 
@@ -131,93 +122,6 @@ const printEnvInfo = () => {
   console.log('─'.repeat(50));
 };
 
-// 创建需要排除的特性映射
-
-const partialBuildPages = [
-  // no need for bundle analyzer (frontend only)
-  {
-    name: 'backend-routes',
-    disabled: isBundleAnalyzer,
-    paths: ['src/app/(backend)'],
-  },
-  // no need for desktop
-  // {
-  //   name: 'changelog',
-  //   disabled: isDesktop,
-  //   paths: ['src/app/[variants]/(main)/changelog'],
-  // },
-  {
-    name: 'auth',
-    disabled: isDesktop,
-    paths: ['src/app/[variants]/(auth)'],
-  },
-  // {
-  //   name: 'mobile',
-  //   disabled: isDesktop,
-  //   paths: ['src/app/[variants]/(main)/(mobile)'],
-  // },
-  {
-    name: 'oauth',
-    disabled: isDesktop,
-    paths: ['src/app/[variants]/oauth', 'src/app/(backend)/oidc'],
-  },
-  {
-    name: 'api-webhooks',
-    disabled: isDesktop,
-    paths: ['src/app/(backend)/api/webhooks'],
-  },
-  {
-    name: 'market-auth',
-    disabled: isDesktop,
-    paths: ['src/app/market-auth-callback'],
-  },
-  {
-    name: 'pwa',
-    disabled: isDesktop,
-    paths: ['src/manifest.ts', 'src/sitemap.tsx', 'src/robots.tsx', 'src/sw'],
-  },
-  // no need for web
-  {
-    name: 'desktop-devtools',
-    disabled: !isDesktop,
-    paths: ['src/app/desktop'],
-  },
-  {
-    name: 'desktop-trpc',
-    disabled: !isDesktop,
-    paths: ['src/app/(backend)/trpc/desktop'],
-  },
-];
-/* eslint-enable */
-
-/**
- * 删除指定的目录
- */
-export const runPrebuild = async (targetDir: string = 'src') => {
-  // 遍历 partialBuildPages 数组
-  for (const page of partialBuildPages) {
-    // 检查是否需要禁用该功能
-    if (page.disabled) {
-      for (const dirPath of page.paths) {
-        // Replace 'src' with targetDir
-        const relativePath = dirPath.replace(/^src/, targetDir);
-        const fullPath = path.resolve(process.cwd(), relativePath);
-
-        // 检查目录是否存在
-        if (existsSync(fullPath)) {
-          try {
-            // 递归删除目录
-            await rm(fullPath, { force: true, recursive: true });
-            console.log(`♻️ Removed ${relativePath} successfully`);
-          } catch (error) {
-            console.error(`Failed to remove directory ${relativePath}:`, error);
-          }
-        }
-      }
-    }
-  }
-};
-
 // Check if the script is being run directly
 const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
 
@@ -229,8 +133,4 @@ if (isMainModule) {
   checkRequiredEnvVars();
 
   printEnvInfo();
-  // 执行删除操作
-  console.log('\nStarting prebuild cleanup...');
-  await runPrebuild();
-  console.log('Prebuild cleanup completed.');
 }
