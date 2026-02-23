@@ -16,8 +16,9 @@ const nextConfig = defineConfig({
           'node_modules/.pnpm/ffmpeg-static*/**',
           // Exclude SPA/desktop/mobile build artifacts from serverless functions
           'public/spa/**',
-          'dist/**',
-          'apps/desktop/build/**',
+          'dist/desktop/**',
+          'dist/mobile/**',
+          'apps/desktop/**',
           'packages/database/migrations/**',
         ],
       }
