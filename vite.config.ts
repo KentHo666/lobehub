@@ -15,7 +15,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 const platform = isMobile ? 'mobile' : isElectron ? 'desktop' : 'web';
 
 export default defineConfig({
-  base: isDev ? '/' : '/spa/',
+  base: isDev ? '/' : process.env.VITE_CDN_BASE || '/spa/',
   build: {
     outDir: isMobile ? 'dist/mobile' : 'dist/desktop',
     rollupOptions: {

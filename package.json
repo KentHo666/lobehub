@@ -32,12 +32,12 @@
     "apps/desktop/src/main"
   ],
   "scripts": {
-    "build": "bun run build:spa && bun run build:spa:mobile && bun run build:spa:copy && bun run build:next",
+    "build": "bun run build:spa && bun run build:spa:copy && bun run build:next",
     "build:analyze": "NODE_OPTIONS=--max-old-space-size=81920 next experimental-analyze",
-    "build:docker": "npm run prebuild && bun run build:spa && bun run build:spa:copy && NODE_OPTIONS=--max-old-space-size=8192 DOCKER=true next build && npm run build-sitemap",
+    "build:docker": "npm run prebuild && bun run build:spa && bun run build:spa:mobile && bun run build:spa:copy && NODE_OPTIONS=--max-old-space-size=8192 DOCKER=true next build && npm run build-sitemap",
     "build:next": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next build",
     "build:spa": "rm -rf public/spa && NODE_OPTIONS=--max-old-space-size=8192 vite build",
-    "build:spa:copy": "mkdir -p public/spa && cp -r dist/desktop/assets dist/mobile/assets public/spa/ && tsx scripts/generateSpaTemplates.mts",
+    "build:spa:copy": "mkdir -p public/spa && cp -r dist/desktop/assets public/spa/ && ([ -d dist/mobile/assets ] && cp -r dist/mobile/assets public/spa/ || true) && tsx scripts/generateSpaTemplates.mts",
     "build:spa:mobile": "cross-env NODE_OPTIONS=--max-old-space-size=8192 MOBILE=true vite build",
     "build-migrate-db": "bun run db:migrate",
     "build-sitemap": "tsx ./scripts/buildSitemapIndex/index.ts",
@@ -117,6 +117,7 @@
     "workflow:docs-cdn": "tsx ./scripts/docsWorkflow/autoCDN.ts",
     "workflow:i18n": "tsx ./scripts/i18nWorkflow/index.ts",
     "workflow:mdx": "tsx ./scripts/mdxWorkflow/index.ts",
+    "workflow:mobile-spa": "tsx scripts/mobileSpaWorkflow/index.ts",
     "workflow:readme": "tsx ./scripts/readmeWorkflow/index.ts",
     "workflow:set-desktop-version": "tsx ./scripts/electronWorkflow/setDesktopVersion.ts"
   },
