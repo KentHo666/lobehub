@@ -4,7 +4,7 @@
 
 Electron Desktop 的 Renderer 层构建，此前依赖 Next.js `output: 'export'`（静态导出），因此需要 `scripts/electronWorkflow/modifiers/` 下 11 个 AST codemod 对源码进行大量转换（动态→静态、移除 server-only 代码、路由裁剪等）。
 
-现已完成 Vite SPA 迁移（见 `spa-plan.md`），Web 端 Renderer 已通过 `vite build` 构建。Electron Renderer 可完全复用此 Vite 构建流程，通过在 `electron-vite` 中增加 `renderer` entry 直接构建，配合 `.desktop` 后缀文件实现桌面端差异化，从而**彻底移除所有 modifier 脚本和 Next.js shadow workspace 构建流程**。
+现已完成 Vite SPA 迁移（见 `01-nextjs-vite-spa-migration.md`），Web 端 Renderer 已通过 `vite build` 构建。Electron Renderer 可完全复用此 Vite 构建流程，通过在 `electron-vite` 中增加 `renderer` entry 直接构建，配合 `.desktop` 后缀文件实现桌面端差异化，从而**彻底移除所有 modifier 脚本和 Next.js shadow workspace 构建流程**。
 
 ### 核心决策
 

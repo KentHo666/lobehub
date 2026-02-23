@@ -12,13 +12,13 @@
 
 ### 与现有 dev 模式的区别
 
-| 维度 | 现有 `next dev` + `vite dev` 联调 | Debug Proxy |
-|------|-----------------------------------|-------------|
-| 运行位置 | 本地 `localhost:3010` + `localhost:3011` | 浏览器打开线上域名 |
-| 后端 | 本地 Next.js server | **线上生产 API** |
-| Auth/Cookie | 本地 session（需单独配置） | **线上真实 session** |
-| 前端 | 本地 Vite dev server | 本地 Vite dev server（通过 proxy 加载） |
-| 适用场景 | 日常开发 | 调试线上问题、验证线上环境行为 |
+| 维度        | 现有 `next dev` + `vite dev` 联调        | Debug Proxy                             |
+| ----------- | ---------------------------------------- | --------------------------------------- |
+| 运行位置    | 本地 `localhost:3010` + `localhost:3011` | 浏览器打开线上域名                      |
+| 后端        | 本地 Next.js server                      | **线上生产 API**                        |
+| Auth/Cookie | 本地 session（需单独配置）               | **线上真实 session**                    |
+| 前端        | 本地 Vite dev server                     | 本地 Vite dev server（通过 proxy 加载） |
+| 适用场景    | 日常开发                                 | 调试线上问题、验证线上环境行为          |
 
 ### 参考实现
 
@@ -42,19 +42,19 @@ Folo 项目的 `debug_proxy.html`：在 Electron renderer 中加载远端 Vite d
 
 ### 1.2 关键设计说明
 
-| 要点 | 说明 |
-|------|------|
-| **路径命名** | `__dangerous_local_dev_proxy` — 下划线前缀 + dangerous 命名，明确表达风险性 |
-| **catch-all** | `[[...path]]` — SPA 客户端路由刷新时返回同一 HTML |
-| **force-static** | 构建时生成静态响应，无服务端运行时成本 |
-| **host 来源** | URL 参数 `?debug-host=` > sessionStorage 缓存 > 默认 `localhost:3011` |
-| **sessionStorage 持久化** | 首次设置后刷新无需再带参数；`?reset` 可清除 |
-| **React Refresh** | 必须在 app bundle 加载前注入，否则 HMR 不生效 |
-| **Script rebase** | 所有 `<script src>` 的相对路径重写为 dev server 绝对 URL |
-| **内联 script rewrite** | `from "/xxx"` 形式的 ESM import 路径也需 rebase |
-| **Worker 补丁** | dev server 与线上不同源，Worker 需通过 Blob URL 中转 |
-| **`__SERVER_CONFIG__`** | 从线上 SPA route 的 HTML 中提取，确保 app 初始化时有完整配置 |
-| **`__DEBUG_PROXY__` 标志** | 供运行时判断是否处于 debug proxy 模式（如需差异化行为） |
+| 要点                       | 说明                                                                        |
+| -------------------------- | --------------------------------------------------------------------------- |
+| **路径命名**               | `__dangerous_local_dev_proxy` — 下划线前缀 + dangerous 命名，明确表达风险性 |
+| **catch-all**              | `[[...path]]` — SPA 客户端路由刷新时返回同一 HTML                           |
+| **force-static**           | 构建时生成静态响应，无服务端运行时成本                                      |
+| **host 来源**              | URL 参数 `?debug-host=` > sessionStorage 缓存 > 默认 `localhost:3011`       |
+| **sessionStorage 持久化**  | 首次设置后刷新无需再带参数；`?reset` 可清除                                 |
+| **React Refresh**          | 必须在 app bundle 加载前注入，否则 HMR 不生效                               |
+| **Script rebase**          | 所有 `<script src>` 的相对路径重写为 dev server 绝对 URL                    |
+| **内联 script rewrite**    | `from "/xxx"` 形式的 ESM import 路径也需 rebase                             |
+| **Worker 补丁**            | dev server 与线上不同源，Worker 需通过 Blob URL 中转                        |
+| **`__SERVER_CONFIG__`**    | 从线上 SPA route 的 HTML 中提取，确保 app 初始化时有完整配置                |
+| **`__DEBUG_PROXY__` 标志** | 供运行时判断是否处于 debug proxy 模式（如需差异化行为）                     |
 
 ---
 
@@ -127,11 +127,11 @@ const __DEBUG_PROXY__: boolean | undefined;
 
 ## 变更总结
 
-| 文件 | 操作 | Phase |
-|------|------|-------|
-| `src/app/__dangerous_local_dev_proxy/[[...path]]/route.ts` | **新增** — Debug Proxy catch-all route | 1 |
-| `vite.config.ts` | **修改** — 添加 `cors: true` | 2 |
-| `src/types/global.d.ts` | **修改** — 添加 `__DEBUG_PROXY__` 类型声明 | 4 |
+| 文件                                                       | 操作                                       | Phase |
+| ---------------------------------------------------------- | ------------------------------------------ | ----- |
+| `src/app/__dangerous_local_dev_proxy/[[...path]]/route.ts` | **新增** — Debug Proxy catch-all route     | 1     |
+| `vite.config.ts`                                           | **修改** — 添加 `cors: true`               | 2     |
+| `src/types/global.d.ts`                                    | **修改** — 添加 `__DEBUG_PROXY__` 类型声明 | 4     |
 
 **净增**：1 个 Next.js route handler + 2 行配置改动。零运行时侵入。
 

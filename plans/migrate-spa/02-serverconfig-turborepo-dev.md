@@ -15,6 +15,7 @@ IMPORTANT: Not lint/format any code or do typecheck. and do git commit when you 
 ## Task 1: 验证 Turborepo Dev 可用
 
 **Files:**
+
 - 已有: `turbo.json`
 - 已有: `package.json` scripts (`dev`, `dev:next`, `dev:spa`)
 
@@ -32,6 +33,7 @@ Expected: Turborepo 并行启动 `dev:next`（port 3010）和 `dev:spa`（port 3
 ## Task 2: index.html 注入 locale 检测前置 script
 
 **Files:**
+
 - Modify: `index.html`
 
 **Step 1: 在 index.html 中添加 locale 检测 script**
@@ -64,11 +66,13 @@ Expected: Turborepo 并行启动 `dev:next`（port 3010）和 `dev:spa`（port 3
         var locale = hl || cookie || navigator.language || 'en-US';
         if (locale === 'auto') locale = navigator.language || 'en-US';
         if (hl && !cookie) {
-          document.cookie = 'LOBE_LOCALE=' + encodeURIComponent(hl) + ';path=/;max-age=7776000;SameSite=Lax';
+          document.cookie =
+            'LOBE_LOCALE=' + encodeURIComponent(hl) + ';path=/;max-age=7776000;SameSite=Lax';
         }
         document.documentElement.lang = locale;
         var rtl = ['ar', 'arc', 'dv', 'fa', 'ha', 'he', 'khw', 'ks', 'ku', 'ps', 'ur', 'yi'];
-        document.documentElement.dir = rtl.indexOf(locale.split('-')[0].toLowerCase()) >= 0 ? 'rtl' : 'ltr';
+        document.documentElement.dir =
+          rtl.indexOf(locale.split('-')[0].toLowerCase()) >= 0 ? 'rtl' : 'ltr';
       })();
     </script>
     <div id="root"></div>
@@ -100,6 +104,7 @@ git commit -m "feat: add locale detection script to index.html for SPA dev mode"
 ## Task 3: SPAServerConfig 类型重构 — 移除 theme 和 locale
 
 **Files:**
+
 - Modify: `src/types/spaServerConfig.ts`
 
 **Step 1: 直接删除 locale 和 theme，不做合并**
@@ -137,6 +142,7 @@ export interface SPAServerConfig {
 ```
 
 变更:
+
 - 删除 `SPAThemeConfig` interface
 - 删除 `locale: string` 和 `theme: SPAThemeConfig`
 - `SPAClientEnv` 不变（不合并 theme 字段）
@@ -157,6 +163,7 @@ git commit -m "refactor: remove locale and theme from SPAServerConfig"
 ## Task 4: Middleware 不改 — 仅确认 SPA 路由透传兼容
 
 **Files:**
+
 - 确认: `src/libs/next/proxy/define-config.ts`（不修改）
 
 **背景:** middleware locale 检测逻辑（`?hl=` → cookie → `Accept-Language`、`RouteVariants.serializeVariants`、cookie 持久化）保持不变。SPA 路由当前走 `NextResponse.next()` 透传至 catch-all，无需改动 — `[locale]` 段将在 Task 5 中通过 `generateStaticParams` 静态生成，不需要 middleware rewrite。
@@ -164,6 +171,7 @@ git commit -m "refactor: remove locale and theme from SPAServerConfig"
 **Step 1: 确认 SPA pass-through 逻辑**
 
 在 `define-config.ts:102` 处：
+
 ```typescript
 if (!isNextjsRoute) {
   logDefault('SPA route, passing through to catch-all: %s', url.pathname);
@@ -181,6 +189,7 @@ SPA 路由不做 rewrite，直接透传。Next.js 的 `[locale]/[[...path]]` cat
 ## Task 5: Catch-all 迁移至 `[locale]` 段 + force-static + SEO meta
 
 **Files:**
+
 - Move: `src/app/(spa)/[[...path]]/route.ts` → `src/app/(spa)/[locale]/[[...path]]/route.ts`
 - Move: `src/app/(spa)/[[...path]]/spaHtmlTemplates.ts` → `src/app/(spa)/[locale]/[[...path]]/spaHtmlTemplates.ts`
 
@@ -315,6 +324,7 @@ export async function GET(
 ```
 
 变更要点：
+
 - 删除: `buildThemeConfig`、`SPAThemeConfig` import、`isRtlLang`、`parseBrowserLanguage`、`DEFAULT_LANG`、`LOBE_LOCALE_COOKIE`、`NextRequest`
 - 删除: `cookieLocale`、`browserLanguage`、`locale` 检测、`dir`、`theme`
 - 删除: `<!--LOCALE-->`、`<!--DIR-->` 替换
@@ -339,6 +349,7 @@ git commit -m "feat: add [locale] segment with force-static and SEO meta generat
 ## Task 6: 更新 SPAGlobalProvider — 移除 theme/locale 读取
 
 **Files:**
+
 - Modify: `src/layout/SPAGlobalProvider/index.tsx`
 
 **Step 1: 修改 SPAGlobalProvider**
@@ -379,9 +390,10 @@ git commit -m "refactor: remove theme/locale reads from SPAGlobalProvider"
 ## Task 7: 更新 global.d.ts 类型声明
 
 **Files:**
+
 - Modify: `src/types/global.d.ts`
 
-**Step 1: 确认 Window.__SERVER_CONFIG__ 类型仍正确**
+**Step 1: 确认 Window.**SERVER_CONFIG** 类型仍正确**
 
 `global.d.ts` 已声明 `Window.__SERVER_CONFIG__` 为 `import('./spaServerConfig').SPAServerConfig | undefined`，由于 Task 3 已修改 `SPAServerConfig` 类型，此处无需改动。仅需确认类型推导正确。
 
@@ -395,6 +407,7 @@ Expected: PASS
 ## Task 8: vite.config.ts — base 区分 dev/prod
 
 **Files:**
+
 - Modify: `vite.config.ts`
 
 **背景:** Vite 构建产物放入 `public/spa/`，由 Next.js 静态托管。prod 模式下 JS/CSS 资源路径需以 `/spa/` 为前缀。dev 模式下 Vite dev server 直接服务，base 为 `/`。
@@ -424,6 +437,7 @@ git commit -m "feat: set vite base to /spa/ for production builds"
 ## Task 9: spaHtmlTemplates 改为构建时生成
 
 **Files:**
+
 - Create: `scripts/generateSpaTemplates.mts`
 - Modify: `src/app/(spa)/[locale]/[[...path]]/spaHtmlTemplates.ts`（将由脚本自动覆写）
 - Modify: `package.json`（更新 `build:spa` script）
@@ -469,11 +483,12 @@ console.log('Generated spaHtmlTemplates.ts');
   "build:next": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next build --webpack",
   "build:spa": "vite build && cross-env MOBILE=true vite build && tsx scripts/generateSpaTemplates.mts",
   "build:spa:copy": "mkdir -p public/spa && cp -r dist/desktop/assets dist/mobile/assets public/spa/",
-  "build:docker": "npm run prebuild && bun run build:spa && bun run build:spa:copy && NODE_OPTIONS=--max-old-space-size=8192 DOCKER=true next build --webpack && npm run build-sitemap"
+  "build:docker": "npm run prebuild && bun run build:spa && bun run build:spa:copy && NODE_OPTIONS=--max-old-space-size=8192 DOCKER=true next build --webpack && npm run build-sitemap",
 }
 ```
 
 变更说明：
+
 - `build`：从单独 `next build` 改为 `build:spa` + `build:next`，先 Vite 构建 SPA + 生成模板，再 Next.js 构建
 - `build:next`：拆出原 `build` 中的 `next build` 部分
 - `build:spa`：末尾追加 `tsx scripts/generateSpaTemplates.mts`
@@ -501,6 +516,7 @@ git commit -m "feat: auto-generate spaHtmlTemplates from vite build output"
 ## Task 10: 全量类型检查 + 清理
 
 **Files:**
+
 - Check: `catch-all.eg.ts`（若引用旧类型需更新或删除）
 
 **Step 1: 全量类型检查**
@@ -526,10 +542,12 @@ git commit -m "refactor: cleanup after SPAServerConfig simplification"
 **背景:** Next.js 报错 `You cannot use different slug names for the same dynamic path ('variants' !== 'locale')`。`(spa)` 路由组内 `[locale]` 与其他路由组内 `[variants]` 冲突。解决方案：将 `(spa)` 路由组改为 `spa` 真实路由段，middleware 做 rewrite。
 
 **Files:**
+
 - Move: `src/app/(spa)/` → `src/app/spa/`
 - Modify: `src/libs/next/proxy/define-config.ts` — SPA 路由不再 pass-through，改为 `NextResponse.rewrite()` 至 `/spa/[locale]/...`
 
 **变更:**
+
 1. `src/app/spa/[locale]/[[...path]]/route.ts` — 路径从 `(spa)` 改为 `spa`
 2. middleware — SPA 路由 rewrite: `url.pathname = /spa/${locale}${pathname}`；直接访问 `/spa/` 前缀的请求 pass-through
 3. `.gitignore` / `scripts/generateSpaTemplates.mts` — 更新路径为 `src/app/spa/...`
@@ -541,10 +559,12 @@ git commit -m "refactor: cleanup after SPAServerConfig simplification"
 **背景:** `resolve.alias` 无法覆盖 `vite-tsconfig-paths` 先解析的 `@/` 路径。改用自定义 Vite 插件 `viteModuleRedirect()`，`enforce: 'pre'`，在 `resolveId` hook 中拦截已解析的绝对路径并重定向至 `.vite.ts` 版本。
 
 **Files:**
+
 - Modify: `vite.config.ts` — 新增 `viteModuleRedirect()` 插件
 - Create: `src/libs/getUILocaleAndResources.vite.ts` — `import.meta.glob` 版本
 
 **重定向映射:**
+
 ```
 src/utils/locale.ts              → src/utils/locale.vite.ts
 src/utils/i18n/loadI18nNamespaceModule.ts → src/utils/i18n/loadI18nNamespaceModule.vite.ts
@@ -558,10 +578,12 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 **背景:** `SPAGlobalProvider` 直接 import `@/layout/GlobalProvider/Locale`，其中 `dayjs/locale/${locale}.js` 动态 import 无法被 Vite 静态分析。需创建 SPA 专用 Locale 组件。
 
 **Files:**
+
 - Create: `src/layout/SPAGlobalProvider/Locale.tsx` — 用 `import.meta.glob('/node_modules/dayjs/locale/*.js')` 加载 dayjs locale，移除 `isOnServerSide` SSR 逻辑
 - Modify: `src/layout/SPAGlobalProvider/index.tsx` — import 改为 `./Locale`
 
 **与 GlobalProvider/Locale.tsx 的差异:**
+
 - dayjs locale: `import(`dayjs/locale/${locale}.js`)` → `import.meta.glob` 静态映射
 - 移除 `isOnServerSide` 分支（SPA 永远在客户端）
 - `getAntdLocale` 由 viteModuleRedirect 插件自动重定向至 `.vite.ts` 版本
@@ -579,6 +601,7 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 **修复:** 注释 DevPanel import 及 JSX 引用（SPA 不需要 Next.js cache viewer）。
 
 **Files:**
+
 - Modify: `src/layout/SPAGlobalProvider/index.tsx` — 注释 `import DevPanel` 和 `<DevPanel />`
 
 ### 14b: HighlightNotification — `next/link` → `<a>`
@@ -588,6 +611,7 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 **修复:** `next/link` 仅用于外链（`target="_blank"`），替换为 `<a>` 标签。
 
 **Files:**
+
 - Modify: `src/components/HighlightNotification/index.tsx` — `import Link from 'next/link'` → 删除，`<Link>` → `<a>`
 
 ### 14c: mdx/Image — `plaiceholder` → `sharp`
@@ -597,6 +621,7 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 **修复:** 创建 `Image.vite.tsx`，去掉 `plaiceholder`/`Buffer`/`'use server'`，直接渲染 `<Image>`。
 
 **Files:**
+
 - Create: `src/components/mdx/Image.vite.tsx`
 - Modify: `vite.config.ts` — 加入 redirect
 
@@ -607,6 +632,7 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 **修复:** 创建 `index.vite.tsx`，跳过 `authEnv` 检查，直接用 `BetterAuth`（无 auth 时 `useSession()` 返回空 session，等效 `NoAuth`）。
 
 **Files:**
+
 - Create: `src/layout/AuthProvider/index.vite.tsx`
 - Modify: `vite.config.ts` — 加入 redirect
 
@@ -617,6 +643,7 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 **修复:** 创建 `.vite.tsx` 版本，从 `window.__SERVER_CONFIG__.analyticsConfig` 读取。
 
 **Files:**
+
 - Create: `src/components/Analytics/LobeAnalyticsProviderWrapper.vite.tsx`
 - Modify: `vite.config.ts` — 加入 redirect
 
@@ -627,6 +654,7 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 **修复:** 还原 `navigation.ts` 为 `next/navigation` 再导出；创建 `navigation.vite.ts`（react-router-dom 实现），通过 redirect 切换。
 
 **Files:**
+
 - Modify: `src/libs/next/navigation.ts` — 还原为 `next/navigation` 再导出（不含 `useServerInsertedHTML`）
 - Create: `src/libs/next/navigation.vite.ts` — react-router-dom 实现
 - Modify: `vite.config.ts` — 加入 redirect
@@ -635,25 +663,25 @@ src/libs/getUILocaleAndResources.ts       → src/libs/getUILocaleAndResources.v
 
 ## 变更总结
 
-| 文件 | 变更 |
-|---|---|
-| `index.html` | 添加 locale 检测前置 script（`?hl=` → cookie → browser），保留 `<!--SEO_META-->` 占位符 |
-| `src/types/spaServerConfig.ts` | 删除 `SPAThemeConfig`、`locale`、`theme`；`SPAClientEnv` 不变 |
-| `src/libs/next/proxy/define-config.ts` | SPA 路由 rewrite 至 `/spa/[locale]/...`；`/spa/` 前缀直接 pass-through |
-| `src/app/spa/[locale]/[[...path]]/route.ts` | 从 `(spa)/[[...path]]/` 迁移至 `spa/[locale]/[[...path]]/`；`force-static` + `generateStaticParams`(18 locales) + `buildSeoMeta` |
-| `src/app/spa/[locale]/[[...path]]/spaHtmlTemplates.ts` | 迁移至新路径；改为自动生成，加入 `.gitignore` |
-| `src/layout/SPAGlobalProvider/index.tsx` | locale 从 DOM 读取；移除 theme prop；import Locale 改为 `./Locale`；注释 DevPanel |
-| `src/layout/SPAGlobalProvider/Locale.tsx` | 新增：SPA 专用 Locale，`import.meta.glob` 加载 dayjs/antd locale，无 SSR 逻辑 |
-| `src/components/HighlightNotification/index.tsx` | `next/link` → `<a>`（外链场景） |
-| `src/components/mdx/Image.vite.tsx` | 新增：去掉 `plaiceholder`/`sharp`，直接渲染 `<Image>` |
-| `src/layout/AuthProvider/index.vite.tsx` | 新增：跳过 `authEnv` server env，直接用 BetterAuth |
-| `src/components/Analytics/LobeAnalyticsProviderWrapper.vite.tsx` | 新增：从 `window.__SERVER_CONFIG__` 读取 analytics 配置 |
-| `src/libs/next/navigation.ts` | 还原为 `next/navigation` 再导出 |
-| `src/libs/next/navigation.vite.ts` | 新增：react-router-dom 实现 |
-| `vite.config.ts` | `base`: dev `/` → prod `/spa/`；`viteModuleRedirect()` 插件含 8 条重定向规则 |
-| `src/utils/locale.vite.ts` | 已有：`import.meta.glob` 加载 antd locale |
-| `src/utils/i18n/loadI18nNamespaceModule.vite.ts` | 已有：`import.meta.glob` 加载 i18n namespace |
-| `src/libs/getUILocaleAndResources.vite.ts` | 新增：`import.meta.glob` 版本 |
-| `scripts/generateSpaTemplates.mts` | 新增：vite build 后生成内联 HTML string 的 `.ts` |
-| `package.json` | `build` = `build:spa` + `build:next`；`build:spa` 追加模板生成 |
-| `turbo.json` | `dev` → `dev:next` 任务定义修复 |
+| 文件                                                             | 变更                                                                                                                             |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `index.html`                                                     | 添加 locale 检测前置 script（`?hl=` → cookie → browser），保留 `<!--SEO_META-->` 占位符                                          |
+| `src/types/spaServerConfig.ts`                                   | 删除 `SPAThemeConfig`、`locale`、`theme`；`SPAClientEnv` 不变                                                                    |
+| `src/libs/next/proxy/define-config.ts`                           | SPA 路由 rewrite 至 `/spa/[locale]/...`；`/spa/` 前缀直接 pass-through                                                           |
+| `src/app/spa/[locale]/[[...path]]/route.ts`                      | 从 `(spa)/[[...path]]/` 迁移至 `spa/[locale]/[[...path]]/`；`force-static` + `generateStaticParams`(18 locales) + `buildSeoMeta` |
+| `src/app/spa/[locale]/[[...path]]/spaHtmlTemplates.ts`           | 迁移至新路径；改为自动生成，加入 `.gitignore`                                                                                    |
+| `src/layout/SPAGlobalProvider/index.tsx`                         | locale 从 DOM 读取；移除 theme prop；import Locale 改为 `./Locale`；注释 DevPanel                                                |
+| `src/layout/SPAGlobalProvider/Locale.tsx`                        | 新增：SPA 专用 Locale，`import.meta.glob` 加载 dayjs/antd locale，无 SSR 逻辑                                                    |
+| `src/components/HighlightNotification/index.tsx`                 | `next/link` → `<a>`（外链场景）                                                                                                  |
+| `src/components/mdx/Image.vite.tsx`                              | 新增：去掉 `plaiceholder`/`sharp`，直接渲染 `<Image>`                                                                            |
+| `src/layout/AuthProvider/index.vite.tsx`                         | 新增：跳过 `authEnv` server env，直接用 BetterAuth                                                                               |
+| `src/components/Analytics/LobeAnalyticsProviderWrapper.vite.tsx` | 新增：从 `window.__SERVER_CONFIG__` 读取 analytics 配置                                                                          |
+| `src/libs/next/navigation.ts`                                    | 还原为 `next/navigation` 再导出                                                                                                  |
+| `src/libs/next/navigation.vite.ts`                               | 新增：react-router-dom 实现                                                                                                      |
+| `vite.config.ts`                                                 | `base`: dev `/` → prod `/spa/`；`viteModuleRedirect()` 插件含 8 条重定向规则                                                     |
+| `src/utils/locale.vite.ts`                                       | 已有：`import.meta.glob` 加载 antd locale                                                                                        |
+| `src/utils/i18n/loadI18nNamespaceModule.vite.ts`                 | 已有：`import.meta.glob` 加载 i18n namespace                                                                                     |
+| `src/libs/getUILocaleAndResources.vite.ts`                       | 新增：`import.meta.glob` 版本                                                                                                    |
+| `scripts/generateSpaTemplates.mts`                               | 新增：vite build 后生成内联 HTML string 的 `.ts`                                                                                 |
+| `package.json`                                                   | `build` = `build:spa` + `build:next`；`build:spa` 追加模板生成                                                                   |
+| `turbo.json`                                                     | `dev` → `dev:next` 任务定义修复                                                                                                  |

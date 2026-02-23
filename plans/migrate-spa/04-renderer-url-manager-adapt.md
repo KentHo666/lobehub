@@ -2,7 +2,7 @@
 
 ## Context
 
-前序 Plan（`electron-vite-renderer.md`）已完成 Renderer 从 Next.js static export 到 Vite SPA 的迁移。但 `RendererUrlManager` 中仍残留 Next.js 逻辑：
+前序 Plan（`03-electron-vite-renderer-migration.md`）已完成 Renderer 从 Next.js static export 到 Vite SPA 的迁移。但 `RendererUrlManager` 中仍残留 Next.js 逻辑：
 
 - **硬编码 `http://localhost:3015`** 作为 dev 模式 renderer URL，实际已不再由 Next.js 提供
 - electron-vite 在 `electron-vite dev` 时自行启动 renderer Vite dev server，并通过 `process.env['ELECTRON_RENDERER_URL']` 注入 URL 到 main process
@@ -24,6 +24,7 @@
 ### 1.1 移除硬编码 URL
 
 删除:
+
 ```typescript
 const devDefaultRendererUrl = 'http://localhost:3015';
 ```
@@ -31,6 +32,7 @@ const devDefaultRendererUrl = 'http://localhost:3015';
 ### 1.2 修改 `configureRendererLoader()`
 
 原逻辑:
+
 ```typescript
 configureRendererLoader() {
   if (isDev && !this.rendererStaticOverride) {
@@ -43,6 +45,7 @@ configureRendererLoader() {
 ```
 
 新逻辑:
+
 ```typescript
 configureRendererLoader() {
   const electronRendererUrl = process.env['ELECTRON_RENDERER_URL'];
@@ -79,10 +82,13 @@ configureRendererLoader() {
 **文件**: `apps/desktop/src/main/core/browser/Browser.ts`
 
 Line 494 注释:
+
 ```typescript
 // In production, the renderer uses app://next protocol which triggers CORS
 ```
+
 改为:
+
 ```typescript
 // In production, the renderer uses app://renderer protocol which triggers CORS
 ```
@@ -90,6 +96,7 @@ Line 494 注释:
 ### 2.2 全局搜索验证
 
 搜索 `apps/desktop/` 下所有 `next` 相关残留引用（排除 node_modules、dist），确认无遗漏:
+
 - `app://next`
 - `Next dev server`
 - `Next export`
@@ -104,13 +111,15 @@ Line 494 注释:
 ### 3.1 添加 dev 模式测试
 
 新增测试用例:
+
 1. **dev + ELECTRON_RENDERER_URL 已设置**: `buildRendererUrl('/')` 返回 `process.env.ELECTRON_RENDERER_URL + '/'`
 2. **dev + ELECTRON_RENDERER_URL 未设置**: 回退到 protocol handler（`app://renderer/`）
 3. **dev + DESKTOP_RENDERER_STATIC**: 无论 `ELECTRON_RENDERER_URL` 是否存在，都使用 protocol handler
 
 需要 mock:
+
 - `@/const/env` 的 `isDev` 为 `true`
-- `process.env['ELECTRON_RENDERER_URL']` 设置/清除
+- `process.env['ELECTRON_RENDERER_URL']` 设置 / 清除
 
 ---
 

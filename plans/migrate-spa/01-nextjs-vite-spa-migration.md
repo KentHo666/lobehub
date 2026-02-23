@@ -576,7 +576,9 @@ Desktop 构建流程暂保持不变，后续单独 PR 适配：
 ## 风险与注意事项
 
 1. **`process.env` 在 Vite 中不可用**：Vite 不注入 `process.env`，所有客户端代码中的 `process.env.*` 需改为 `import.meta.env.*` 或 `window.__SERVER_CONFIG__`。可通过 Vite define 提供兼容层，但建议逐步替换。
+
 2. **Emotion SSR**：当前 Next.js 有 `compiler.emotion` 支持。Vite 侧需配置 `@emotion/babel-plugin`（通过 `@vitejs/plugin-react` 的 `babel` 选项）。
+
 3. **i18n /locale 在 Vite 中需要独立实现**：Vite 不支持 Next.js 式的 `import()` 动态路径，需改用 `import.meta.glob` 静态分析。已有 Vite 版实现：
    - `src/utils/locale.vite.ts` — antd locale 加载（`import.meta.glob` 读取 `antd/es/locale/*.js`）
    - `src/utils/i18n/loadI18nNamespaceModule.vite.ts` — i18n namespace 加载（`import.meta.glob` 读取 `locales/` 目录）
@@ -584,4 +586,5 @@ Desktop 构建流程暂保持不变，后续单独 PR 适配：
    Vite build 时需通过 alias 或条件导入将这些 `.vite.ts` 版本替换掉原版（如在 `vite.config.ts` 的 `resolve.alias` 中映射）。
 
 4. **Circular dependency**：现有 `pnpm circular` 检查需在 SPA 工程中同步验证。
+
 5. **Desktop Electron 构建**：本次不动 desktop，但需确保 `src/` 结构变化不破坏 modifier 脚本。删除 `src/app/[variants]/` 会导致 desktop modifier 失效 —— 因此 Phase 10 清理需在 desktop 适配 PR 之后，或保留 `[variants]` 目录结构作为 desktop 构建入口直到 desktop 迁移完成。
