@@ -1,5 +1,3 @@
-export const dynamic = 'force-static';
-
 const DEFAULT_DEV_HOST = 'http://localhost:3011';
 
 const html = /* html */ `<!doctype html>

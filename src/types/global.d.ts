@@ -19,6 +19,7 @@ declare module 'styled-components' {
 declare global {
   interface Window {
     __CHAT_STORE__?: any;
+    __DEBUG_PROXY__: boolean | undefined;
     __editor?: IEditor;
     __SERVER_CONFIG__: SPAServerConfig | undefined;
     lobeEnv?: {
@@ -32,7 +33,4 @@ declare global {
 
   /** Vite define: current bundle is Electron desktop variant */
   const __ELECTRON__: boolean | undefined;
-
-  /** Set by debug-proxy.html when loading local dev server on production domain */
-  const __DEBUG_PROXY__: boolean | undefined;
 }
