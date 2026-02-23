@@ -32,6 +32,9 @@ const nextjsOnlyRoutes = [
   '/welcome',
 ];
 
+// Dev-only debug proxy route should bypass all middleware rewrites.
+const dangerousLocalDevProxyRoute = '/__dangerous_local_dev_proxy';
+
 export function defineConfig() {
   const backendApiEndpoints = ['/api', '/trpc', '/webapi', '/oidc'];
 
@@ -98,6 +101,14 @@ export function defineConfig() {
 
     // Direct access to /spa/ pre-rendered pages — pass through
     if (url.pathname.startsWith('/spa/')) {
+      return NextResponse.next();
+    }
+
+    if (
+      url.pathname === dangerousLocalDevProxyRoute ||
+      url.pathname.startsWith(`${dangerousLocalDevProxyRoute}/`)
+    ) {
+      logDefault('Skipping rewrite for dangerous local dev proxy route: %s', url.pathname);
       return NextResponse.next();
     }
 
