@@ -1,4 +1,3 @@
-import analyzer from '@next/bundle-analyzer';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
 import { type NextConfig } from 'next';
 import { type Header, type Redirect } from 'next/dist/lib/load-custom-routes';
@@ -427,9 +426,5 @@ export function defineConfig(config: CustomNextConfig) {
     },
   };
 
-  const noWrapper = (config: NextConfig) => config;
-
-  const withBundleAnalyzer = process.env.ANALYZE === 'true' ? analyzer() : noWrapper;
-
-  return withBundleAnalyzer(nextConfig as NextConfig);
+  return nextConfig;
 }
