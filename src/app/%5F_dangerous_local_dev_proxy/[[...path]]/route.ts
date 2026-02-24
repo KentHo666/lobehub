@@ -1,4 +1,4 @@
-const DEFAULT_DEV_HOST = 'http://localhost:3011';
+const DEFAULT_DEV_HOST = 'http://localhost:9876';
 
 const html = /* html */ `<!doctype html>
 <html>

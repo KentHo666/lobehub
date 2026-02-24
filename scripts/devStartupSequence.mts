@@ -1,8 +1,27 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import net from 'node:net';
 
 const NEXT_HOST = 'localhost';
-const NEXT_PORT = 3010;
+
+/**
+ * Parse the Next.js dev port from the `dev:next` script in the nearest package.json.
+ * Supports both `--port <n>` and `-p <n>` flags. Falls back to 3010.
+ */
+const resolveNextPort = (): number => {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf-8'));
+    const devNext: string | undefined = pkg?.scripts?.['dev:next'];
+    if (devNext) {
+      const match = devNext.match(/(?:--port|-p)\s+(\d+)/);
+      if (match) return Number(match[1]);
+    }
+  } catch { /* fallback */ }
+  return 3010;
+};
+
+const NEXT_PORT = resolveNextPort();
 const NEXT_ROOT_URL = `http://${NEXT_HOST}:${NEXT_PORT}/`;
 const NEXT_READY_TIMEOUT_MS = 180_000;
 const NEXT_READY_RETRY_MS = 400;

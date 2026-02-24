@@ -41,7 +41,7 @@ export function generateStaticParams() {
 }
 
 const isDev = process.env.NODE_ENV === 'development';
-const VITE_DEV_ORIGIN = process.env.VITE_DEV_ORIGIN || 'http://localhost:3011';
+const VITE_DEV_ORIGIN = 'http://localhost:9876';
 
 async function rewriteViteAssetUrls(html: string): Promise<string> {
   const { parseHTML } = await import('linkedom');

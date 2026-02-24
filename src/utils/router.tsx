@@ -11,6 +11,7 @@ import {
   useRouteError,
 } from 'react-router-dom';
 
+import ErrorCapture from '@/components/Error';
 import Loading from '@/components/Loading/BrandTextLoading';
 import { useGlobalStore } from '@/store/global';
 
@@ -98,8 +99,6 @@ export interface ErrorBoundaryProps {
 }
 
 export const ErrorBoundary = ({ resetPath }: ErrorBoundaryProps) => {
-  const ErrorCapture = require('@/components/Error').default;
-
   const error = useRouteError() as Error;
   const navigate = useNavigate();
 
