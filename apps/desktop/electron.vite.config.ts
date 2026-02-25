@@ -8,6 +8,7 @@ import {
   sharedOptimizeDeps,
   sharedRendererDefine,
   sharedRendererPlugins,
+  sharedRollupOutput,
 } from '../../plugins/vite/sharedRendererConfig';
 import { getExternalDependencies } from './native-deps.config.mjs';
 
@@ -35,7 +36,7 @@ const isDev = process.env.NODE_ENV === 'development';
 const updateChannel = process.env.UPDATE_CHANNEL;
 const ROOT_DIR = resolve(__dirname, '../..');
 
-console.log(`[electron-vite.config.ts] Detected UPDATE_CHANNEL: ${updateChannel}`);
+console.info(`[electron-vite.config.ts] Detected UPDATE_CHANNEL: ${updateChannel}`);
 
 export default defineConfig({
   main: {
@@ -94,6 +95,7 @@ export default defineConfig({
       outDir: resolve(__dirname, 'dist/renderer'),
       rollupOptions: {
         input: resolve(__dirname, 'index.html'),
+        output: sharedRollupOutput,
       },
     },
     define: sharedRendererDefine({ isMobile: false, isElectron: true }),

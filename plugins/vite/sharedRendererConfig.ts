@@ -6,6 +6,94 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 import { viteNodeModuleStub } from './nodeModuleStub';
 import { vitePlatformResolve } from './platformResolve';
 
+/**
+ * Shared manualChunks — groups leaf-node modules to reduce chunk file count.
+ * Only targets pure data modules (no downstream dependents) to avoid facade chunk issues.
+ */
+/** Large i18n namespaces that get their own per-locale chunk instead of merging into the locale bundle */
+const HEAVY_NS = new Set(['models', 'modelProvider']);
+
+/** antd locale filename → app locale */
+const ANTD_LOCALE: Record<string, string> = {
+  ar_EG: 'ar',
+  bg_BG: 'bg-BG',
+  de_DE: 'de-DE',
+  en_US: 'en-US',
+  es_ES: 'es-ES',
+  fa_IR: 'fa-IR',
+  fr_FR: 'fr-FR',
+  it_IT: 'it-IT',
+  ja_JP: 'ja-JP',
+  ko_KR: 'ko-KR',
+  nl_NL: 'nl-NL',
+  pl_PL: 'pl-PL',
+  pt_BR: 'pt-BR',
+  ru_RU: 'ru-RU',
+  tr_TR: 'tr-TR',
+  vi_VN: 'vi-VN',
+  zh_CN: 'zh-CN',
+  zh_TW: 'zh-TW',
+};
+
+/** dayjs locale filename → app locale */
+const DAYJS_LOCALE: Record<string, string> = {
+  'ar': 'ar',
+  'bg': 'bg-BG',
+  'de': 'de-DE',
+  'en': 'en-US',
+  'es': 'es-ES',
+  'fa': 'fa-IR',
+  'fr': 'fr-FR',
+  'it': 'it-IT',
+  'ja': 'ja-JP',
+  'ko': 'ko-KR',
+  'nl': 'nl-NL',
+  'pl': 'pl-PL',
+  'pt-br': 'pt-BR',
+  'ru': 'ru-RU',
+  'tr': 'tr-TR',
+  'vi': 'vi-VN',
+  'zh-cn': 'zh-CN',
+  'zh-tw': 'zh-TW',
+};
+
+function sharedManualChunks(id: string): string | undefined {
+  // i18n locale JSON/TS files
+  const localeMatch = id.match(/\/locales\/([^/]+)\/([^/.]+)/);
+  if (localeMatch) {
+    const [, locale, ns] = localeMatch;
+    if (locale === 'default') return 'i18n-default';
+    if (HEAVY_NS.has(ns)) return `i18n-${locale}-${ns}`;
+    return `i18n-${locale}`;
+  }
+
+  if (!id.includes('node_modules')) return;
+
+  // antd locale → merge into i18n-{locale}
+  const antdMatch = id.match(/antd\/es\/locale\/([^/.]+)\.js/);
+  if (antdMatch) {
+    const locale = ANTD_LOCALE[antdMatch[1]];
+    if (locale) return `i18n-${locale}`;
+  }
+
+  // dayjs locale → merge into i18n-{locale}
+  const dayjsMatch = id.match(/dayjs\/locale\/([^/.]+)\.js/);
+  if (dayjsMatch) {
+    const locale = DAYJS_LOCALE[dayjsMatch[1]];
+    if (locale) return `i18n-${locale}`;
+  }
+
+  // Lucide icons
+  if (id.includes('lucide-react')) return 'vendor-icons';
+
+  // es-toolkit
+  if (id.includes('es-toolkit')) return 'vendor-es-toolkit';
+}
+
+export const sharedRollupOutput = {
+  manualChunks: sharedManualChunks,
+};
+
 type Platform = 'web' | 'mobile' | 'desktop';
 
 const isDev = process.env.NODE_ENV !== 'production';

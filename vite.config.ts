@@ -8,6 +8,7 @@ import {
   sharedOptimizeDeps,
   sharedRendererDefine,
   sharedRendererPlugins,
+  sharedRollupOutput,
 } from './plugins/vite/sharedRendererConfig';
 
 const isMobile = process.env.MOBILE === 'true';
@@ -21,6 +22,7 @@ export default defineConfig({
     outDir: isMobile ? 'dist/mobile' : 'dist/desktop',
     rollupOptions: {
       input: resolve(__dirname, isMobile ? 'index.mobile.html' : 'index.html'),
+      output: sharedRollupOutput,
     },
   },
   define: sharedRendererDefine({ isMobile, isElectron: false }),
@@ -34,7 +36,7 @@ export default defineConfig({
       registerType: 'prompt',
       workbox: {
         globPatterns: ['**/*.{js,css,html,woff2}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         runtimeCaching: [
           {
             handler: 'StaleWhileRevalidate',
