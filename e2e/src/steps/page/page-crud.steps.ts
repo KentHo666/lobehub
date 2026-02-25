@@ -179,7 +179,6 @@ Given('用户在 Page 页面有一个文稿', async function (this: CustomWorld)
   console.log('   📍 Step: 导航到 Page 页面...');
   await this.page.goto('/page');
   await this.page.waitForLoadState('networkidle', { timeout: 15_000 });
-  await waitForPageWorkspaceReady(this);
 
   console.log('   📍 Step: 通过 UI 创建新文稿...');
   await clickNewPageButton(this);
@@ -288,7 +287,6 @@ Given('用户在 Page 页面有一个文稿 {string}', async function (this: Cus
   console.log('   📍 Step: 导航到 Page 页面...');
   await this.page.goto('/page');
   await this.page.waitForLoadState('networkidle', { timeout: 15_000 });
-  await waitForPageWorkspaceReady(this);
 
   console.log('   📍 Step: 通过 UI 创建新文稿...');
   await clickNewPageButton(this);
