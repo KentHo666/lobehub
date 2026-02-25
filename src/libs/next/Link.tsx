@@ -3,8 +3,10 @@
  * External URLs (http/https) are rendered as plain <a> tags.
  */
 
-import { type AnchorHTMLAttributes, forwardRef } from 'react';
+import { type AnchorHTMLAttributes } from 'react';
 import { Link as RRLink } from 'react-router-dom';
+
+import { nextjsOnlyRoutes } from './nextjsOnlyRoutes';
 
 export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
   href: string;
@@ -13,24 +15,37 @@ export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>,
   scroll?: boolean;
 }
 
-const Link = forwardRef<HTMLAnchorElement, LinkProps>(
-  ({ href, replace, prefetch, scroll, children, ...rest }, ref) => {
-    // External links → plain <a>
-    if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('//')) {
-      return (
-        <a ref={ref} href={href} {...rest}>
-          {children}
-        </a>
-      );
-    }
+const isExternalOrNextOnly = (href: string) =>
+  href.startsWith('http://') ||
+  href.startsWith('https://') ||
+  href.startsWith('//') ||
+  nextjsOnlyRoutes.some(
+    (route) => href === route || href.startsWith(`${route}/`) || href.startsWith(`${route}?`),
+  );
 
+const Link = ({
+  ref,
+  href,
+  replace,
+  prefetch,
+  scroll,
+  children,
+  ...rest
+}: LinkProps & { ref?: React.RefObject<HTMLAnchorElement | null> }) => {
+  if (isExternalOrNextOnly(href)) {
     return (
-      <RRLink ref={ref} replace={replace} to={href} {...rest}>
+      <a href={href} ref={ref} {...rest}>
         {children}
-      </RRLink>
+      </a>
     );
-  },
-);
+  }
+
+  return (
+    <RRLink ref={ref} replace={replace} to={href} {...rest}>
+      {children}
+    </RRLink>
+  );
+};
 
 Link.displayName = 'Link';
 

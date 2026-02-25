@@ -13,24 +13,12 @@ import { type Locales } from '@/locales/resources';
 import { parseBrowserLanguage } from '@/utils/locale';
 import { RouteVariants } from '@/utils/server/routeVariants';
 
+import { nextjsOnlyRoutes } from '../nextjsOnlyRoutes';
 import { createRouteMatcher } from './createRouteMatcher';
 
 // Create debug logger instances
 const logDefault = debug('middleware:default');
 const logBetterAuth = debug('middleware:better-auth');
-
-// Auth/Next.js routes that must NOT go to SPA catch-all
-const nextjsOnlyRoutes = [
-  '/signin',
-  '/signup',
-  '/auth-error',
-  '/reset-password',
-  '/verify-email',
-  '/oauth',
-  '/market-auth-callback',
-  '/discover',
-  '/welcome',
-];
 
 // Dev-only debug proxy route should bypass all middleware rewrites.
 const dangerousLocalDevProxyRoute = '/__dangerous_local_dev_proxy';
