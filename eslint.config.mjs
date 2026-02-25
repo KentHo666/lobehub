@@ -75,6 +75,7 @@ export default eslint(
     files: ['**/*.mdx'],
     rules: {
       ...mdxFlat.rules,
+      '@typescript-eslint/consistent-type-imports': 0,
       '@typescript-eslint/no-unused-vars': 1,
       'no-undef': 0,
       'react/jsx-no-undef': 0,
