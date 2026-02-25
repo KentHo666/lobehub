@@ -10,7 +10,7 @@ import { createI18nNext } from '@/locales/create';
 import { getAntdLocale } from '@/utils/locale';
 
 const dayjsLocaleLoaders = import.meta.glob<{ default: ILocale }>(
-  '/node_modules/dayjs/locale/*.js',
+  '/node_modules/dayjs/locale/{ar,bg,de,en,es,fa,fr,it,ja,ko,nl,pl,pt-br,ru,tr,vi,zh-cn,zh-tw}.js',
 );
 
 const updateDayjs = async (lang: string) => {
