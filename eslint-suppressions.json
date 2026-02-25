@@ -883,13 +883,5 @@
     "prefer-const": {
       "count": 1
     }
-  },
-  "tests/setup.ts": {
-    "import/first": {
-      "count": 1
-    },
-    "import/newline-after-import": {
-      "count": 1
-    }
   }
 }
