@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 import { viteNodeModuleStub } from './nodeModuleStub';
@@ -15,6 +16,7 @@ interface SharedRendererOptions {
 
 export function sharedRendererPlugins(options: SharedRendererOptions) {
   return [
+    nodePolyfills({ include: ['buffer'] }),
     viteNodeModuleStub(),
     vitePlatformResolve(options.platform),
     tsconfigPaths(),

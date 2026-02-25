@@ -121,12 +121,8 @@ export class FileActionImpl {
 
           previewUrl = URL.createObjectURL(new Blob([data!], { type: file.type }));
 
-          const bytes = new Uint8Array(data!);
-          let binary = '';
-          for (const byte of bytes) {
-            binary += String.fromCharCode(byte);
-          }
-          base64Url = `data:${file.type};base64,${btoa(binary)}`;
+          const base64 = Buffer.from(data!).toString('base64');
+          base64Url = `data:${file.type};base64,${base64}`;
         }
 
         return { base64Url, file, id: file.name, previewUrl, status: 'pending' } as UploadFileItem;

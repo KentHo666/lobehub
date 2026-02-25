@@ -16,7 +16,7 @@ export const getTracePayload = (req: Request): TracePayload | undefined => {
 export const getTraceId = (res: Response) => res.headers.get(LOBE_CHAT_TRACE_ID);
 
 const createTracePayload = (data: TracePayload) => {
-  return btoa(JSON.stringify(data));
+  return Buffer.from(JSON.stringify(data)).toString('base64');
 };
 
 export const createTraceHeader = (data: TracePayload) => {
