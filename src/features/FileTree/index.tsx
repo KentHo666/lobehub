@@ -39,6 +39,10 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 interface FileTreeProps {
   onSelectFile: (path: string) => void;
   resourceTree: SkillResourceTreeNode[];
+  rootFile?: {
+    label: string;
+    path: string;
+  } | null;
   selectedFile: string;
 }
 
@@ -94,7 +98,7 @@ const TreeNode = memo<{
 
 TreeNode.displayName = 'TreeNode';
 
-const FileTree = memo<FileTreeProps>(({ resourceTree, selectedFile, onSelectFile }) => {
+const FileTree = memo<FileTreeProps>(({ resourceTree, rootFile, selectedFile, onSelectFile }) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -124,21 +128,25 @@ const FileTree = memo<FileTreeProps>(({ resourceTree, selectedFile, onSelectFile
     });
   }, []);
 
-  const isSkillMdSelected = selectedFile === 'SKILL.md';
+  const rootFilePath = rootFile === undefined ? 'SKILL.md' : rootFile?.path;
+  const rootFileLabel = rootFile === undefined ? 'SKILL.md' : rootFile?.label;
+  const isRootFileSelected = !!rootFilePath && selectedFile === rootFilePath;
 
   const hasResources = useMemo(() => resourceTree.length > 0, [resourceTree]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div
-        className={`${styles.item} ${isSkillMdSelected ? styles.itemSelected : ''}`}
-        style={{ paddingInlineStart: 8 }}
-        onClick={() => onSelectFile('SKILL.md')}
-      >
-        <span style={{ flexShrink: 0, width: 14 }} />
-        <Icon icon={File} size={16} />
-        <span className={styles.label}>SKILL.md</span>
-      </div>
+      {rootFilePath && rootFileLabel && (
+        <div
+          className={`${styles.item} ${isRootFileSelected ? styles.itemSelected : ''}`}
+          style={{ paddingInlineStart: 8 }}
+          onClick={() => onSelectFile(rootFilePath)}
+        >
+          <span style={{ flexShrink: 0, width: 14 }} />
+          <Icon icon={File} size={16} />
+          <span className={styles.label}>{rootFileLabel}</span>
+        </div>
+      )}
       {hasResources &&
         resourceTree.map((node) => (
           <TreeNode
@@ -156,5 +164,7 @@ const FileTree = memo<FileTreeProps>(({ resourceTree, selectedFile, onSelectFile
 });
 
 FileTree.displayName = 'FileTree';
+
+export { default as FileTreeSkeleton } from './Skeleton';
 
 export default FileTree;
