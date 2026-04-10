@@ -8,6 +8,7 @@ import { type LucideIcon } from 'lucide-react';
 export type PageType =
   | 'agent'
   | 'agent-topic'
+  | 'agent-topic-page'
   | 'group'
   | 'group-topic'
   | 'page'
@@ -27,6 +28,11 @@ export interface AgentParams {
 export interface AgentTopicParams {
   agentId: string;
   topicId: string;
+}
+
+export interface AgentTopicPageParams {
+  agentId: string;
+  topicId?: string;
 }
 
 export interface GroupParams {
@@ -70,6 +76,7 @@ export interface HomeParams {}
 export interface PageParamsMap {
   'agent': AgentParams;
   'agent-topic': AgentTopicParams;
+  'agent-topic-page': AgentTopicPageParams;
   'community': CommunityParams;
   'group': GroupParams;
   'group-topic': GroupTopicParams;

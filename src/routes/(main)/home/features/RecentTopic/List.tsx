@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 
+import { SESSION_CHAT_TOPIC_URL } from '@/const/url';
 import GroupSkeleton from '@/routes/(main)/home/features/components/GroupSkeleton';
 import { RECENT_BLOCK_SIZE } from '@/routes/(main)/home/features/const';
 import { useHomeStore } from '@/store/home';
@@ -27,7 +28,9 @@ const RecentTopicList = memo(() => {
     const topicUrl =
       topic.type === 'group' && topic.group
         ? `/group/${topic.group.id}?topic=${topic.id}`
-        : `/agent/${topic?.agent?.id}?topic=${topic.id}`;
+        : topic.agent?.id
+          ? SESSION_CHAT_TOPIC_URL(topic.agent.id, topic.id)
+          : '/chat';
 
     return (
       <Link

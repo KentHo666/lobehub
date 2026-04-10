@@ -2,6 +2,7 @@ import isEqual from 'fast-deep-equal';
 import { gt, parse, valid } from 'semver';
 import { type SWRResponse } from 'swr';
 
+import { SESSION_CHAT_TOPIC_URL } from '@/const/url';
 import { CURRENT_VERSION, isDesktop } from '@/const/version';
 import { useOnlyFetchOnceSWR } from '@/libs/swr';
 import { globalService } from '@/services/global';
@@ -64,12 +65,13 @@ export class GlobalGeneralActionImpl {
   };
 
   openTopicInNewWindow = async (agentId: string, topicId: string): Promise<void> => {
-    const url = `/agent/${agentId}?topic=${topicId}${isDesktop ? '&mode=single' : ''}`;
+    const basePath = SESSION_CHAT_TOPIC_URL(agentId, topicId);
+    const url = `${basePath}${isDesktop ? '?mode=single' : ''}`;
 
     if (isDesktop) {
       try {
         const { ensureElectronIpc } = await import('@/utils/electron/ipc');
-        const path = `/agent/${agentId}?topic=${topicId}&mode=single`;
+        const path = `${basePath}?mode=single`;
 
         const result = await ensureElectronIpc().windows.createMultiInstanceWindow({
           path,

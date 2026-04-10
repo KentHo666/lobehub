@@ -5,11 +5,15 @@ import { ActionIcon } from '@lobehub/ui';
 import { FilePenIcon } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { SESSION_CHAT_PAGE_URL } from '@/const/url';
 import { useChatStore } from '@/store/chat';
 
 const NotebookButton = memo(() => {
   const { t } = useTranslation('portal');
+  const navigate = useNavigate();
+  const params = useParams<{ aid?: string; topicId?: string }>();
   const [showNotebook, toggleNotebook] = useChatStore((s) => [s.showNotebook, s.toggleNotebook]);
 
   return (
@@ -18,7 +22,14 @@ const NotebookButton = memo(() => {
       icon={FilePenIcon}
       size={DESKTOP_HEADER_ICON_SIZE}
       title={t('notebook.title')}
-      onClick={() => toggleNotebook()}
+      onClick={() => {
+        if (params.aid) {
+          navigate(SESSION_CHAT_PAGE_URL(params.aid));
+          return;
+        }
+
+        toggleNotebook();
+      }}
     />
   );
 });

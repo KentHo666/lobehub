@@ -52,10 +52,10 @@ export interface FloatingChatPanelProps extends Pick<
  * `agentId`/`topicId` props; the component builds its own `ConversationContext`
  * internally.
  *
- * ⚠️ Single instance per page. Mounting a second FloatingChatPanel while one is
+ * @FIXME ⚠️ Single instance per page. Mounting a second FloatingChatPanel while one is
  * already mounted will throw. See `./guard.ts` for the rationale.
  *
- * ⚠️ Must not coexist with the main-page ConversationArea (both use MainChatInput,
+ * @FIXME ⚠️ Must not coexist with the main-page ConversationArea (both use MainChatInput,
  * which writes to the global `useChatStore.mainInputEditor` slot). This is NOT
  * enforced at runtime — consumer responsibility.
  */

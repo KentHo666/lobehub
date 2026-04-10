@@ -27,6 +27,25 @@ export const desktopRoutes: RouteObject[] = [
               },
               {
                 element: dynamicElement(
+                  () => import('@/routes/(main)/agent/page'),
+                  'Desktop > Chat > Page',
+                ),
+                path: 'page',
+              },
+              {
+                children: [
+                  {
+                    element: dynamicElement(
+                      () => import('@/routes/(main)/agent/[topicId]'),
+                      'Desktop > Chat > Topic',
+                    ),
+                    index: true,
+                  },
+                ],
+                path: ':topicId',
+              },
+              {
+                element: dynamicElement(
                   () => import('@/routes/(main)/agent/profile'),
                   'Desktop > Chat > Profile',
                 ),

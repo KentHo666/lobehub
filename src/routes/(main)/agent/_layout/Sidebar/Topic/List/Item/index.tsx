@@ -5,6 +5,7 @@ import { AnimatePresence, m } from 'motion/react';
 import { memo, Suspense, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { SESSION_CHAT_TOPIC_URL } from '@/const/url';
 import { isDesktop } from '@/const/version';
 import { pluginRegistry } from '@/features/Electron/titlebar/RecentlyViewed/plugins';
 import NavItem from '@/features/NavPanel/components/NavItem';
@@ -74,7 +75,7 @@ const TopicItem = memo<TopicItemProps>(({ id, title, fav, active, threadId, meta
   // Construct href for cmd+click support
   const href = useMemo(() => {
     if (!activeAgentId || !id) return undefined;
-    return `/agent/${activeAgentId}?topic=${id}`;
+    return SESSION_CHAT_TOPIC_URL(activeAgentId, id);
   }, [activeAgentId, id]);
 
   const [editing, isLoading] = useChatStore((s) => [
@@ -115,7 +116,8 @@ const TopicItem = memo<TopicItemProps>(({ id, title, fav, active, threadId, meta
       clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
     }
-    const reference = pluginRegistry.parseUrl(`/agent/${activeAgentId}`, `topic=${id}`);
+    const url = SESSION_CHAT_TOPIC_URL(activeAgentId, id);
+    const reference = pluginRegistry.parseUrl(url, '');
     if (reference) {
       addTab(reference);
       navigateToTopic(id);

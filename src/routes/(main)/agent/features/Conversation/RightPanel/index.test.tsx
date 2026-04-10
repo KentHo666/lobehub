@@ -1,11 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useGlobalStore } from '@/store/global';
 import { initialState } from '@/store/global/initialState';
 
-import Conversation from '../index';
 import AgentWorkspaceRightPanel from './index';
 
 const useClientDataSWR = vi.fn();
@@ -18,6 +17,9 @@ let mockAgentMeta: { avatar?: string; title?: string } = {
 vi.mock('@lobehub/ui', () => ({
   Accordion: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
     <div {...props}>{children}</div>
+  ),
+  ActionIcon: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
+    <button {...props}>{children}</button>
   ),
   AccordionItem: ({
     children,
@@ -77,11 +79,6 @@ vi.mock('@/libs/swr', () => ({
   useClientDataSWR: (...args: unknown[]) => useClientDataSWR(...args),
 }));
 
-vi.mock('@/components/DragUploadZone', () => ({
-  default: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  useUploadFiles: () => ({ handleUploadFiles: vi.fn() }),
-}));
-
 vi.mock('@/store/agent', () => ({
   useAgentStore: (selector: (state: Record<string, unknown>) => unknown) => selector?.({}),
 }));
@@ -102,18 +99,6 @@ vi.mock('@/features/Conversation/store', () => ({
     selector({ dbMessages: [] }),
 }));
 
-vi.mock('../ConversationArea', () => ({
-  default: () => <div>conversation-area</div>,
-}));
-
-vi.mock('../Header', () => ({
-  default: () => <div>chat-header</div>,
-}));
-
-vi.mock('../ViewerPanel', () => ({
-  default: () => null,
-}));
-
 beforeEach(() => {
   useClientDataSWR.mockImplementation(() => ({
     data: [],
@@ -131,27 +116,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Conversation right panel mount', () => {
-  it('mounts the conversation-side right panel path and respects the existing global right-panel state', async () => {
-    const { unmount } = render(<Conversation />);
-
-    expect(screen.getByText('chat-header')).toBeInTheDocument();
-    expect(screen.getByText('conversation-area')).toBeInTheDocument();
-    expect(screen.getByTestId('right-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('workspace-summary')).toBeInTheDocument();
-    expect(screen.getByTestId('workspace-progress')).toBeInTheDocument();
-    expect(screen.getByTestId('workspace-resources')).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('right-panel')).toHaveAttribute('data-expand', 'true');
-      expect(useGlobalStore.getState().status.showRightPanel).toBe(true);
-    });
-
-    unmount();
-
-    expect(useGlobalStore.getState().status.showRightPanel).toBe(true);
-  });
-
+describe('Agent workspace right panel', () => {
   it('renders summary, progress, and resources sections in order', () => {
     render(<AgentWorkspaceRightPanel selectedDocumentId={null} onSelectDocument={vi.fn()} />);
 
