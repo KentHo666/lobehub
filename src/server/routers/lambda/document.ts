@@ -8,6 +8,14 @@ import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { DocumentService } from '@/server/services/document';
 
+import {
+  compareDocumentHistoryVersionsInputSchema,
+  type DocumentHistoryRouterService,
+  getDocumentHistoryVersionInputSchema,
+  listDocumentHistoryInputSchema,
+  updateDocumentInputSchema,
+} from './_schema/documentHistory';
+
 const documentProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
 
@@ -117,6 +125,30 @@ export const documentRouter = router({
       return ctx.documentService.getDocumentById(input.id);
     }),
 
+  listDocumentHistory: documentProcedure
+    .input(listDocumentHistoryInputSchema)
+    .query(async ({ ctx, input }) => {
+      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
+
+      return historyService.listDocumentHistory(input);
+    }),
+
+  getDocumentHistoryVersion: documentProcedure
+    .input(getDocumentHistoryVersionInputSchema)
+    .query(async ({ ctx, input }) => {
+      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
+
+      return historyService.getDocumentHistoryVersion(input);
+    }),
+
+  compareDocumentHistoryVersions: documentProcedure
+    .input(compareDocumentHistoryVersionsInputSchema)
+    .query(async ({ ctx, input }) => {
+      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
+
+      return historyService.compareDocumentHistoryVersions(input);
+    }),
+
   getFolderBreadcrumb: documentProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ ctx, input }) => {
@@ -183,23 +215,14 @@ export const documentRouter = router({
     }),
 
   updateDocument: documentProcedure
-    .input(
-      z.object({
-        content: z.string().optional(),
-        editorData: z.string().optional(),
-        fileType: z.string().optional(),
-        id: z.string(),
-        metadata: z.record(z.any()).optional(),
-        parentId: z.string().nullable().optional(),
-        rawData: z.string().optional(),
-        title: z.string().optional(),
-      }),
-    )
+    .input(updateDocumentInputSchema)
     .mutation(async ({ ctx, input }) => {
       const { id, editorData: editorDataString, ...params } = input;
       // Parse editorData from JSON string to object if present
       const editorData = editorDataString ? JSON.parse(editorDataString) : undefined;
-      return ctx.documentService.updateDocument(id, {
+      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
+
+      return historyService.updateDocument(id, {
         ...params,
         editorData,
       });

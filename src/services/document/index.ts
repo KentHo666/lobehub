@@ -1,6 +1,16 @@
 import { type DocumentItem } from '@lobechat/database/schemas';
 
 import { lambdaClient } from '@/libs/trpc/client';
+import type {
+  CompareHistoryVersionsInput,
+  CompareHistoryVersionsOutput,
+  GetHistoryVersionInput,
+  GetHistoryVersionOutput,
+  ListHistoryInput,
+  ListHistoryOutput,
+  UpdateDocumentInput,
+  UpdateDocumentOutput,
+} from '@/server/routers/lambda/_schema/documentHistory';
 
 import { abortableRequest } from '../utils/abortableRequest';
 
@@ -15,14 +25,24 @@ export interface CreateDocumentParams {
   title: string;
 }
 
-export interface UpdateDocumentParams {
-  content?: string;
-  editorData?: string;
-  fileType?: string;
-  id: string;
-  metadata?: Record<string, any>;
-  parentId?: string | null;
-  title?: string;
+export interface ListDocumentHistoryParams extends ListHistoryInput {}
+
+export interface GetDocumentHistoryVersionParams extends GetHistoryVersionInput {}
+
+export interface CompareDocumentHistoryVersionsParams extends CompareHistoryVersionsInput {}
+
+export interface UpdateDocumentParams extends UpdateDocumentInput {}
+
+export interface DocumentHistoryClientSurface {
+  compareDocumentHistoryVersions: (
+    params: CompareDocumentHistoryVersionsParams,
+  ) => Promise<CompareHistoryVersionsOutput>;
+  getDocumentHistoryVersion: (
+    params: GetDocumentHistoryVersionParams,
+    uniqueKey?: string,
+  ) => Promise<GetHistoryVersionOutput>;
+  listDocumentHistory: (params: ListDocumentHistoryParams) => Promise<ListHistoryOutput>;
+  updateDocument: (params: UpdateDocumentParams) => Promise<UpdateDocumentOutput | void>;
 }
 
 export class DocumentService {
@@ -41,6 +61,29 @@ export class DocumentService {
     sourceTypes?: string[];
   }): Promise<{ items: DocumentItem[]; total: number }> {
     return lambdaClient.document.queryDocuments.query(params);
+  }
+
+  async listDocumentHistory(params: ListDocumentHistoryParams): Promise<ListHistoryOutput> {
+    return lambdaClient.document.listDocumentHistory.query(params);
+  }
+
+  async getDocumentHistoryVersion(
+    params: GetDocumentHistoryVersionParams,
+    uniqueKey?: string,
+  ): Promise<GetHistoryVersionOutput> {
+    if (uniqueKey) {
+      return abortableRequest.execute(uniqueKey, async (signal) =>
+        lambdaClient.document.getDocumentHistoryVersion.query(params, { signal }),
+      );
+    }
+
+    return lambdaClient.document.getDocumentHistoryVersion.query(params);
+  }
+
+  async compareDocumentHistoryVersions(
+    params: CompareDocumentHistoryVersionsParams,
+  ): Promise<CompareHistoryVersionsOutput> {
+    return lambdaClient.document.compareDocumentHistoryVersions.query(params);
   }
 
   async getDocumentById(id: string, uniqueKey?: string): Promise<DocumentItem | undefined> {
@@ -63,9 +106,10 @@ export class DocumentService {
     await lambdaClient.document.deleteDocuments.mutate({ ids });
   }
 
-  async updateDocument(params: UpdateDocumentParams): Promise<void> {
-    await lambdaClient.document.updateDocument.mutate(params);
+  async updateDocument(params: UpdateDocumentParams): Promise<UpdateDocumentOutput> {
+    return lambdaClient.document.updateDocument.mutate(params);
   }
 }
 
-export const documentService = new DocumentService();
+export const documentService = new DocumentService() as DocumentService &
+  DocumentHistoryClientSurface;

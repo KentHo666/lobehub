@@ -5,11 +5,13 @@ import { DocumentModel } from '@/database/models/document';
 import { FileModel } from '@/database/models/file';
 
 import { FileService } from '../../file';
+import { DocumentHistoryService } from '../history';
 import { DocumentService } from '../index';
 
 vi.mock('@/database/models/document');
 vi.mock('@/database/models/file');
 vi.mock('../../file');
+vi.mock('../history');
 vi.mock('@lobechat/file-loaders', () => ({
   loadFile: vi.fn(),
 }));
@@ -23,6 +25,7 @@ describe('DocumentService', () => {
   let service: DocumentService;
   let mockDb: LobeChatDatabase;
   let mockDocumentModel: any;
+  let mockDocumentHistoryService: any;
   let mockFileModel: any;
   let mockFileService: any;
   const userId = 'test-user-id';
@@ -37,6 +40,9 @@ describe('DocumentService', () => {
           findMany: vi.fn().mockResolvedValue([]),
         },
       },
+      transaction: vi.fn(async (callback: (tx: LobeChatDatabase) => Promise<unknown>) =>
+        callback(mockDb),
+      ),
     } as any;
 
     mockDocumentModel = {
@@ -46,6 +52,14 @@ describe('DocumentService', () => {
       findById: vi.fn(),
       query: vi.fn(),
       update: vi.fn(),
+    };
+
+    mockDocumentHistoryService = {
+      appendCurrentHead: vi.fn(),
+      compactHistory: vi.fn(),
+      compareDocumentHistoryVersions: vi.fn(),
+      getDocumentHistoryVersion: vi.fn(),
+      listDocumentHistory: vi.fn(),
     };
 
     mockFileModel = {
@@ -60,6 +74,7 @@ describe('DocumentService', () => {
     };
 
     vi.mocked(DocumentModel).mockImplementation(() => mockDocumentModel);
+    vi.mocked(DocumentHistoryService).mockImplementation(() => mockDocumentHistoryService);
     vi.mocked(FileModel).mockImplementation(() => mockFileModel);
     vi.mocked(FileService).mockImplementation(() => mockFileService);
 
@@ -313,6 +328,54 @@ describe('DocumentService', () => {
     });
   });
 
+  describe('document history', () => {
+    it('should delegate listDocumentHistory to DocumentHistoryService', async () => {
+      const mockResult = { headVersion: 3, items: [{ isCurrent: true, version: 3 }] };
+      mockDocumentHistoryService.listDocumentHistory.mockResolvedValue(mockResult);
+
+      const result = await service.listDocumentHistory({ documentId: 'doc-1' });
+
+      expect(mockDocumentHistoryService.listDocumentHistory).toHaveBeenCalledWith({
+        documentId: 'doc-1',
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should delegate getDocumentHistoryVersion to DocumentHistoryService', async () => {
+      const mockResult = { editorData: { blocks: [] }, isCurrent: true, version: 2 };
+      mockDocumentHistoryService.getDocumentHistoryVersion.mockResolvedValue(mockResult);
+
+      const result = await service.getDocumentHistoryVersion({ documentId: 'doc-1', version: 2 });
+
+      expect(mockDocumentHistoryService.getDocumentHistoryVersion).toHaveBeenCalledWith({
+        documentId: 'doc-1',
+        version: 2,
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should delegate compareDocumentHistoryVersions to DocumentHistoryService', async () => {
+      const mockResult = {
+        from: { editorData: { blocks: [{ id: '1' }] }, isCurrent: false, version: 1 },
+        to: { editorData: { blocks: [{ id: '2' }] }, isCurrent: true, version: 2 },
+      };
+      mockDocumentHistoryService.compareDocumentHistoryVersions.mockResolvedValue(mockResult);
+
+      const result = await service.compareDocumentHistoryVersions({
+        documentId: 'doc-1',
+        fromVersion: 1,
+        toVersion: 2,
+      });
+
+      expect(mockDocumentHistoryService.compareDocumentHistoryVersions).toHaveBeenCalledWith({
+        documentId: 'doc-1',
+        fromVersion: 1,
+        toVersion: 2,
+      });
+      expect(result).toEqual(mockResult);
+    });
+  });
+
   describe('deleteDocument', () => {
     it('should return early if document not found', async () => {
       mockDocumentModel.findById.mockResolvedValue(undefined);
@@ -424,12 +487,21 @@ describe('DocumentService', () => {
   });
 
   describe('updateDocument', () => {
+    const createCurrentDocument = (overrides: Record<string, unknown> = {}) => ({
+      editorData: { blocks: [] },
+      fileId: null,
+      id: 'doc-1',
+      updatedAt: new Date('2026-04-11T00:00:00.000Z'),
+      version: 1,
+      ...overrides,
+    });
+
     it('should update content and recalculate char/line counts', async () => {
       const newContent = 'Updated\nContent';
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: null });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument());
 
-      await service.updateDocument('doc-1', { content: newContent });
+      const result = await service.updateDocument('doc-1', { content: newContent });
 
       expect(mockDocumentModel.update).toHaveBeenCalledWith(
         'doc-1',
@@ -439,24 +511,52 @@ describe('DocumentService', () => {
           totalLineCount: 2,
         }),
       );
+      expect(mockDocumentHistoryService.appendCurrentHead).not.toHaveBeenCalled();
+      expect(result).toEqual({ historyAppended: false, id: 'doc-1', version: 1 });
     });
 
-    it('should update editorData', async () => {
+    it('should append history and bump version when editorData changes', async () => {
       const editorData = { blocks: [{ type: 'paragraph', text: 'Hello' }] };
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: null });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument());
 
-      await service.updateDocument('doc-1', { editorData });
+      const result = await service.updateDocument('doc-1', { editorData, saveSource: 'manual' });
+
+      expect(mockDocumentModel.update).toHaveBeenCalledWith(
+        'doc-1',
+        expect.objectContaining({ editorData, version: 2 }),
+      );
+      expect(mockDocumentHistoryService.appendCurrentHead).toHaveBeenCalledWith(
+        expect.objectContaining({
+          documentId: 'doc-1',
+          editorData: { blocks: [] },
+          saveSource: 'manual',
+          version: 1,
+        }),
+      );
+      expect(mockDocumentHistoryService.compactHistory).toHaveBeenCalledWith('doc-1');
+      expect(result).toEqual({ historyAppended: true, id: 'doc-1', version: 2 });
+    });
+
+    it('should skip history when editorData is unchanged', async () => {
+      const editorData = { blocks: [] };
+      mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument());
+
+      const result = await service.updateDocument('doc-1', { editorData });
 
       expect(mockDocumentModel.update).toHaveBeenCalledWith(
         'doc-1',
         expect.objectContaining({ editorData }),
       );
+      expect(mockDocumentHistoryService.appendCurrentHead).not.toHaveBeenCalled();
+      expect(mockDocumentHistoryService.compactHistory).not.toHaveBeenCalled();
+      expect(result).toEqual({ historyAppended: false, id: 'doc-1', version: 1 });
     });
 
     it('should update title and filename together', async () => {
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: null });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument());
 
       await service.updateDocument('doc-1', { title: 'New Title' });
 
@@ -471,7 +571,7 @@ describe('DocumentService', () => {
 
     it('should sync title update to associated file', async () => {
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: 'file-1' });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument({ fileId: 'file-1' }));
       mockFileModel.update.mockResolvedValue(undefined);
 
       await service.updateDocument('doc-1', { title: 'New Title' });
@@ -481,7 +581,7 @@ describe('DocumentService', () => {
 
     it('should sync parentId update to associated file', async () => {
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: 'file-1' });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument({ fileId: 'file-1' }));
       mockFileModel.update.mockResolvedValue(undefined);
 
       await service.updateDocument('doc-1', { parentId: 'new-parent' });
@@ -491,7 +591,7 @@ describe('DocumentService', () => {
 
     it('should sync both title and parentId to file when both are updated', async () => {
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: 'file-1' });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument({ fileId: 'file-1' }));
       mockFileModel.update.mockResolvedValue(undefined);
 
       await service.updateDocument('doc-1', { title: 'New Title', parentId: 'new-parent' });
@@ -504,7 +604,7 @@ describe('DocumentService', () => {
 
     it('should NOT update file when document has no associated file', async () => {
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: null });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument());
 
       await service.updateDocument('doc-1', { title: 'New Title' });
 
@@ -514,7 +614,7 @@ describe('DocumentService', () => {
     it('should update metadata', async () => {
       const metadata = { key: 'value' };
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: null });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument());
 
       await service.updateDocument('doc-1', { metadata });
 
@@ -526,7 +626,7 @@ describe('DocumentService', () => {
 
     it('should update fileType', async () => {
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: null });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument());
 
       await service.updateDocument('doc-1', { fileType: 'text/markdown' });
 
@@ -538,12 +638,20 @@ describe('DocumentService', () => {
 
     it('should handle parentId null (moving to root)', async () => {
       mockDocumentModel.update.mockResolvedValue({ id: 'doc-1' });
-      mockDocumentModel.findById.mockResolvedValue({ id: 'doc-1', fileId: 'file-1' });
+      mockDocumentModel.findById.mockResolvedValue(createCurrentDocument({ fileId: 'file-1' }));
       mockFileModel.update.mockResolvedValue(undefined);
 
       await service.updateDocument('doc-1', { parentId: null });
 
       expect(mockFileModel.update).toHaveBeenCalledWith('file-1', { parentId: null });
+    });
+
+    it('should throw when document does not exist', async () => {
+      mockDocumentModel.findById.mockResolvedValue(undefined);
+
+      await expect(service.updateDocument('missing-doc', { title: 'Missing' })).rejects.toThrow(
+        'Document not found: missing-doc',
+      );
     });
   });
 
