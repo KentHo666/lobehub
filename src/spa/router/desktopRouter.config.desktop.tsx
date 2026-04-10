@@ -17,9 +17,10 @@ import DesktopVideoLayout from '@/routes/(main)/(create)/video/_layout';
 import AgentPage from '@/routes/(main)/agent';
 import DesktopChatLayout from '@/routes/(main)/agent/_layout';
 import AgentTopicPage from '@/routes/(main)/agent/[topicId]';
+import AgentTopicNotebookPage from '@/routes/(main)/agent/[topicId]/page';
 import AgentChannelPage from '@/routes/(main)/agent/channel';
 import AgentCronDetailPage from '@/routes/(main)/agent/cron/[cronId]';
-import AgentNotebookPage from '@/routes/(main)/agent/page';
+import AgentPageRedirectPage from '@/routes/(main)/agent/page';
 import AgentProfilePage from '@/routes/(main)/agent/profile';
 import CommunityLayout from '@/routes/(main)/community/_layout';
 import CommunityDetailLayout from '@/routes/(main)/community/(detail)/_layout';
@@ -93,7 +94,7 @@ export const desktopRoutes: RouteObject[] = [
                 index: true,
               },
               {
-                element: <AgentNotebookPage />,
+                element: <AgentPageRedirectPage />,
                 path: 'page',
               },
               {
@@ -101,6 +102,10 @@ export const desktopRoutes: RouteObject[] = [
                   {
                     element: <AgentTopicPage />,
                     index: true,
+                  },
+                  {
+                    element: <AgentTopicNotebookPage />,
+                    path: 'page',
                   },
                 ],
                 path: ':topicId',

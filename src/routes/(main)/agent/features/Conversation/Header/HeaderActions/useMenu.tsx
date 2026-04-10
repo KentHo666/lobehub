@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { SESSION_CHAT_PAGE_URL } from '@/const/url';
+import { SESSION_CHAT_TOPIC_PAGE_URL } from '@/const/url';
 import { useChatStore } from '@/store/chat';
 import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors';
@@ -33,8 +33,8 @@ export const useMenu = (): { menuItems: DropdownItem[] } => {
         key: 'notebook',
         label: tPortal('notebook.title'),
         onClick: () => {
-          if (params.aid) {
-            navigate(SESSION_CHAT_PAGE_URL(params.aid));
+          if (params.aid && params.topicId) {
+            navigate(SESSION_CHAT_TOPIC_PAGE_URL(params.aid, params.topicId));
             return;
           }
 
@@ -59,6 +59,7 @@ export const useMenu = (): { menuItems: DropdownItem[] } => {
     [
       navigate,
       params.aid,
+      params.topicId,
       t,
       tPortal,
       toggleNotebook,

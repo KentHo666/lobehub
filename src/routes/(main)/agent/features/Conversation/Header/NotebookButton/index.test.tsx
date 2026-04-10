@@ -46,26 +46,26 @@ describe('NotebookButton', () => {
     useParamsMock.mockReset();
   });
 
-  it('navigates to the agent page route when aid is present', () => {
+  it('navigates to the topic page route when topicId is present', () => {
     useParamsMock.mockReturnValue({ aid: 'agt_test', topicId: 'tpc_test' });
 
     render(<NotebookButton />);
 
     fireEvent.click(screen.getByRole('button', { name: 'notebook.title' }));
 
-    expect(navigateMock).toHaveBeenCalledWith('/agent/agt_test/page');
+    expect(navigateMock).toHaveBeenCalledWith('/agent/agt_test/tpc_test/page');
     expect(toggleNotebookMock).not.toHaveBeenCalled();
   });
 
-  it('still navigates to the agent page route when topicId is missing', () => {
+  it('falls back to the legacy notebook toggle when topicId is missing', () => {
     useParamsMock.mockReturnValue({ aid: 'agt_test' });
 
     render(<NotebookButton />);
 
     fireEvent.click(screen.getByRole('button', { name: 'notebook.title' }));
 
-    expect(navigateMock).toHaveBeenCalledWith('/agent/agt_test/page');
-    expect(toggleNotebookMock).not.toHaveBeenCalled();
+    expect(toggleNotebookMock).toHaveBeenCalledTimes(1);
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 
   it('falls back to the legacy notebook toggle when aid is missing', () => {

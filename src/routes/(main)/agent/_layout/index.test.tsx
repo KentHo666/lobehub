@@ -96,13 +96,13 @@ describe('Agent layout workspace panel ownership', () => {
     expect(screen.getByTestId('agent-layout-right-panel-value')).toHaveTextContent('none');
   });
 
-  it('keeps the right panel on /page but hides chat-only viewer state', () => {
+  it('keeps the right panel on topic /page but hides chat-only viewer state', () => {
     const { rerender } = render(<Layout />);
 
     fireEvent.click(screen.getByText('select document'));
     expect(screen.getByTestId('agent-layout-viewer-value')).toHaveTextContent('doc-1');
 
-    mockLocation.pathname = '/agent/agent-1/page';
+    mockLocation.pathname = '/agent/agent-1/tpc_topic-1/page';
     rerender(<Layout />);
 
     expect(screen.queryByTestId('agent-layout-viewer')).not.toBeInTheDocument();

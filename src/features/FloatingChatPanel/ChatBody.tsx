@@ -14,11 +14,19 @@ import MainChatInput from '@/routes/(main)/agent/features/Conversation/MainChatI
  */
 const ChatBody = memo(() => {
   return (
-    <>
+    <Flexbox
+      data-testid="floating-chat-panel-body"
+      flex={1}
+      height={'100%'}
+      style={{ minHeight: 0 }}
+      width={'100%'}
+    >
       <Flexbox
+        data-testid="floating-chat-panel-list"
         flex={1}
         width={'100%'}
         style={{
+          minHeight: 0,
           overflowX: 'hidden',
           overflowY: 'auto',
           position: 'relative',
@@ -27,7 +35,7 @@ const ChatBody = memo(() => {
         <ChatList />
       </Flexbox>
       <MainChatInput />
-    </>
+    </Flexbox>
   );
 });
 

@@ -7,7 +7,7 @@ import { type ReactNode } from 'react';
 import { memo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
-import { SESSION_CHAT_PAGE_URL, SESSION_CHAT_TOPIC_URL, SESSION_CHAT_URL } from '@/const/url';
+import { SESSION_CHAT_TOPIC_PAGE_URL, SESSION_CHAT_TOPIC_URL } from '@/const/url';
 import NavHeader from '@/features/NavHeader';
 import { useChatStore } from '@/store/chat';
 import { chatPortalSelectors } from '@/store/chat/selectors';
@@ -16,14 +16,15 @@ const Header = memo<{ title: ReactNode }>(({ title }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams<{ aid?: string; topicId?: string }>();
-  const [activeTopicId, canGoBack, goBack, clearPortalStack] = useChatStore((s) => [
-    s.activeTopicId,
+  const [canGoBack, goBack, clearPortalStack] = useChatStore((s) => [
     chatPortalSelectors.canGoBack(s),
     s.goBack,
     s.clearPortalStack,
   ]);
-  const isAgentPageRoute =
-    !!params.aid && location.pathname.startsWith(SESSION_CHAT_PAGE_URL(params.aid));
+  const isTopicPageRoute =
+    !!params.aid &&
+    !!params.topicId &&
+    location.pathname.startsWith(SESSION_CHAT_TOPIC_PAGE_URL(params.aid, params.topicId));
 
   return (
     <NavHeader
@@ -42,12 +43,8 @@ const Header = memo<{ title: ReactNode }>(({ title }) => {
           icon={PanelRightCloseIcon}
           size={DESKTOP_HEADER_ICON_SIZE}
           onClick={() => {
-            if (params.aid && isAgentPageRoute) {
-              navigate(
-                activeTopicId
-                  ? SESSION_CHAT_TOPIC_URL(params.aid, activeTopicId)
-                  : SESSION_CHAT_URL(params.aid),
-              );
+            if (params.aid && params.topicId && isTopicPageRoute) {
+              navigate(SESSION_CHAT_TOPIC_URL(params.aid, params.topicId));
               return;
             }
 

@@ -5,7 +5,7 @@ import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import AgentPage from './index';
+import TopicPage from './index';
 
 const useParamsMock = vi.hoisted(() => vi.fn());
 
@@ -50,11 +50,11 @@ vi.mock('@/features/FloatingChatPanel', () => ({
   ),
 }));
 
-describe('Agent page route', () => {
-  it('renders FloatingChatPanel with visible test props', () => {
-    useParamsMock.mockReturnValue({ aid: 'agt_test' });
+describe('Topic page route', () => {
+  it('renders FloatingChatPanel with route topic context', () => {
+    useParamsMock.mockReturnValue({ aid: 'agt_test', topicId: 'tpc_test' });
 
-    render(<AgentPage />);
+    render(<TopicPage />);
 
     expect(screen.getByTestId('agent-page-container')).toBeInTheDocument();
     expect(screen.getByTestId('floating-chat-panel')).toHaveAttribute('data-agent-id', 'agt_test');
@@ -63,14 +63,14 @@ describe('Agent page route', () => {
       'data-title',
       'Floating Chat Panel',
     );
-    expect(screen.getByTestId('floating-chat-panel')).toHaveAttribute('data-topic-id', 'null');
+    expect(screen.getByTestId('floating-chat-panel')).toHaveAttribute('data-topic-id', 'tpc_test');
     expect(screen.getByTestId('floating-chat-panel')).toHaveAttribute('data-variant', 'embedded');
   });
 
-  it('returns null when aid is missing', () => {
-    useParamsMock.mockReturnValue({});
+  it('returns null when aid or topicId is missing', () => {
+    useParamsMock.mockReturnValue({ aid: 'agt_test' });
 
-    const { container } = render(<AgentPage />);
+    const { container } = render(<TopicPage />);
 
     expect(container).toBeEmptyDOMElement();
   });

@@ -32,7 +32,7 @@ export interface AgentTopicParams {
 
 export interface AgentTopicPageParams {
   agentId: string;
-  topicId?: string;
+  topicId: string;
 }
 
 export interface GroupParams {

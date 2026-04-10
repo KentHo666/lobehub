@@ -7,7 +7,7 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { SESSION_CHAT_PAGE_URL } from '@/const/url';
+import { SESSION_CHAT_TOPIC_PAGE_URL } from '@/const/url';
 import { useChatStore } from '@/store/chat';
 
 const NotebookButton = memo(() => {
@@ -23,8 +23,8 @@ const NotebookButton = memo(() => {
       size={DESKTOP_HEADER_ICON_SIZE}
       title={t('notebook.title')}
       onClick={() => {
-        if (params.aid) {
-          navigate(SESSION_CHAT_PAGE_URL(params.aid));
+        if (params.aid && params.topicId) {
+          navigate(SESSION_CHAT_TOPIC_PAGE_URL(params.aid, params.topicId));
           return;
         }
 

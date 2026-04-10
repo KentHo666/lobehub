@@ -28,7 +28,7 @@ export const desktopRoutes: RouteObject[] = [
               {
                 element: dynamicElement(
                   () => import('@/routes/(main)/agent/page'),
-                  'Desktop > Chat > Page',
+                  'Desktop > Chat > Invalid Page Redirect',
                 ),
                 path: 'page',
               },
@@ -40,6 +40,13 @@ export const desktopRoutes: RouteObject[] = [
                       'Desktop > Chat > Topic',
                     ),
                     index: true,
+                  },
+                  {
+                    element: dynamicElement(
+                      () => import('@/routes/(main)/agent/[topicId]/page'),
+                      'Desktop > Chat > Topic > Page',
+                    ),
+                    path: 'page',
                   },
                 ],
                 path: ':topicId',

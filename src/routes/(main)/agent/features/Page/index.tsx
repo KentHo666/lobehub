@@ -6,10 +6,10 @@ import { useParams } from 'react-router-dom';
 
 import FloatingChatPanel from '@/features/FloatingChatPanel';
 
-const AgentPage = memo(() => {
-  const params = useParams<{ aid?: string }>();
+const TopicPage = memo(() => {
+  const params = useParams<{ aid?: string; topicId?: string }>();
 
-  if (!params.aid) return null;
+  if (!params.aid || !params.topicId) return null;
 
   return (
     <Flexbox
@@ -24,11 +24,11 @@ const AgentPage = memo(() => {
         maxHeight={0.92}
         minHeight={320}
         title={'Floating Chat Panel'}
-        topicId={null}
+        topicId={params.topicId}
         variant={'embedded'}
       />
     </Flexbox>
   );
 });
 
-export default AgentPage;
+export default TopicPage;
