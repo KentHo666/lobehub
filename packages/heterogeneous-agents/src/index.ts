@@ -11,4 +11,5 @@ export type {
   StreamStartData,
   ToolCallPayload,
   ToolEndData,
+  ToolResultData,
 } from './types';

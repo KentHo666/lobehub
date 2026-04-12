@@ -82,18 +82,43 @@ const subscribeBroadcasts = (
 };
 
 /**
- * Create tool messages in DB for tool_use blocks from the adapter.
- * Called before feeding tool-related events to the gateway handler.
+ * Persisted tool-call registry for a single ACP execution.
+ *
+ * Tracks which tool_use ids have been persisted to avoid duplicates,
+ * and holds the enriched payload (with result_msg_id) that gets written
+ * back to the assistant message's tools JSONB.
  */
-const persistToolCalls = async (
-  toolCalls: ToolCallPayload[],
+interface ToolPersistenceState {
+  /** Ordered list of ChatToolPayload[] written to assistant.tools */
+  payloads: (ToolCallPayload & { result_msg_id?: string })[];
+  /** Set of tool_use.id that have been persisted (de-dupe guard) */
+  persistedIds: Set<string>;
+  /** Map tool_use.id → tool message DB id (for later content update on tool_result) */
+  toolMsgIdByCallId: Map<string, string>;
+}
+
+/**
+ * Persist any newly-seen tool calls and update the assistant message's tools JSONB.
+ *
+ * Guarantees:
+ * - One tool message per unique tool_use.id (idempotent against re-processing)
+ * - assistant.tools[].result_msg_id is set to the created tool message id, so
+ *   the UI's parse() step can link tool messages back to the assistant turn
+ *   (otherwise they render as orphan warnings).
+ */
+const persistNewToolCalls = async (
+  incoming: ToolCallPayload[],
+  state: ToolPersistenceState,
   assistantMessageId: string,
   context: ConversationContext,
 ) => {
-  for (const tool of toolCalls) {
+  const freshTools = incoming.filter((t) => !state.persistedIds.has(t.id));
+  if (freshTools.length === 0) return;
+
+  for (const tool of freshTools) {
+    state.persistedIds.add(tool.id);
     try {
-      // Create tool message + messagePlugins record
-      await messageService.createMessage({
+      const result = await messageService.createMessage({
         agentId: context.agentId,
         content: '',
         parentId: assistantMessageId,
@@ -107,16 +132,18 @@ const persistToolCalls = async (
         tool_call_id: tool.id,
         topicId: context.topicId ?? undefined,
       });
+      state.toolMsgIdByCallId.set(tool.id, result.id);
+      state.payloads.push({ ...tool, result_msg_id: result.id });
     } catch (err) {
       console.error('[ACP] Failed to create tool message:', err);
+      state.payloads.push(tool);
     }
   }
 
-  // Update assistant message's tools JSONB
   try {
     await messageService.updateMessage(
       assistantMessageId,
-      { tools: toolCalls },
+      { tools: state.payloads },
       {
         agentId: context.agentId,
         topicId: context.topicId,
@@ -124,6 +151,39 @@ const persistToolCalls = async (
     );
   } catch (err) {
     console.error('[ACP] Failed to update assistant tools:', err);
+  }
+};
+
+/**
+ * Update a tool message's content in DB when tool_result arrives.
+ */
+const persistToolResult = async (
+  toolCallId: string,
+  content: string,
+  isError: boolean,
+  state: ToolPersistenceState,
+  context: ConversationContext,
+) => {
+  const toolMsgId = state.toolMsgIdByCallId.get(toolCallId);
+  if (!toolMsgId) {
+    console.warn('[ACP] tool_result for unknown toolCallId:', toolCallId);
+    return;
+  }
+
+  try {
+    await messageService.updateToolMessage(
+      toolMsgId,
+      {
+        content,
+        pluginError: isError ? { message: content } : undefined,
+      },
+      {
+        agentId: context.agentId,
+        topicId: context.topicId,
+      },
+    );
+  } catch (err) {
+    console.error('[ACP] Failed to update tool message content:', err);
   }
 };
 
@@ -159,8 +219,15 @@ export const executeACPAgent = async (
   let completed = false;
 
   // Track state for DB persistence
-  // (Gateway handler accumulates in memory; ACP needs to persist since no server does it)
-  let allToolCalls: ToolCallPayload[] = [];
+  const toolState: ToolPersistenceState = {
+    payloads: [],
+    persistedIds: new Set(),
+    toolMsgIdByCallId: new Map(),
+  };
+  /** Serializes async persist operations so ordering is stable. */
+  let persistQueue: Promise<void> = Promise.resolve();
+  /** Content accumulators — Gateway server persists these during streaming;
+   * ACP has no server so we persist at onComplete. */
   let accumulatedContent = '';
   let accumulatedReasoning = '';
 
@@ -178,12 +245,25 @@ export const executeACPAgent = async (
     // Subscribe to broadcasts BEFORE sending prompt
     unsubscribe = subscribeBroadcasts(acpSessionId, {
       onRawLine: (line) => {
-        // Adapter converts raw → HeterogeneousAgentEvent[]
         const events = adapter.adapt(line);
 
         for (const event of events) {
-          // Accumulate content for DB persistence
-          // (Gateway server persists during streaming; ACP has no server, so we persist at stream end)
+          // ─── tool_result: update tool message content in DB (ACP-only) ───
+          if (event.type === 'tool_result') {
+            const { content, isError, toolCallId } = event.data as {
+              content: string;
+              isError?: boolean;
+              toolCallId: string;
+            };
+            persistQueue = persistQueue.then(() =>
+              persistToolResult(toolCallId, content, !!isError, toolState, context),
+            );
+            // Don't forward — the tool_end that follows triggers fetchAndReplaceMessages
+            // which reads the updated content from DB.
+            continue;
+          }
+
+          // ─── stream_chunk: accumulate content + persist tool_use ───
           if (event.type === 'stream_chunk') {
             const chunk = event.data;
             if (chunk?.chunkType === 'text' && chunk.content) {
@@ -195,13 +275,14 @@ export const executeACPAgent = async (
             if (chunk?.chunkType === 'tools_calling') {
               const tools = chunk.toolsCalling as ToolCallPayload[];
               if (tools?.length) {
-                allToolCalls = [...allToolCalls, ...tools];
-                persistToolCalls(allToolCalls, assistantMessageId, context);
+                persistQueue = persistQueue.then(() =>
+                  persistNewToolCalls(tools, toolState, assistantMessageId, context),
+                );
               }
             }
           }
 
-          // Feed into unified handler
+          // Forward all other events to the unified Gateway handler
           eventHandler(toStreamEvent(event, operationId));
         }
       },
@@ -216,8 +297,10 @@ export const executeACPAgent = async (
           eventHandler(toStreamEvent(event, operationId));
         }
 
-        // Persist accumulated content to DB before completing
-        // (Gateway server does this during streaming; ACP has no server)
+        // Wait for all tool persistence to finish before writing final state
+        await persistQueue.catch(console.error);
+
+        // Persist accumulated content/reasoning to the single assistant message
         if (accumulatedContent || accumulatedReasoning) {
           const updateValue: Record<string, any> = {};
           if (accumulatedContent) updateValue.content = accumulatedContent;
@@ -252,7 +335,8 @@ export const executeACPAgent = async (
         if (completed) return;
         completed = true;
 
-        // Persist any partial content before reporting error
+        await persistQueue.catch(console.error);
+
         if (accumulatedContent) {
           await messageService
             .updateMessage(

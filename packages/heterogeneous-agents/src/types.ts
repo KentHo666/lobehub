@@ -21,6 +21,12 @@ export type HeterogeneousEventType =
   | 'stream_end'
   | 'tool_start'
   | 'tool_end'
+  /**
+   * Tool result content arrived. ACP-specific (Gateway tools run on server,
+   * so server handles result persistence). Executor should update the tool
+   * message in DB with this content.
+   */
+  | 'tool_result'
   | 'step_complete'
   | 'agent_runtime_end'
   | 'error';
@@ -52,6 +58,13 @@ export interface StreamChunkData {
 /** Data shape for tool_end events */
 export interface ToolEndData {
   isSuccess: boolean;
+  toolCallId: string;
+}
+
+/** Data shape for tool_result events (ACP-specific) */
+export interface ToolResultData {
+  content: string;
+  isError?: boolean;
   toolCallId: string;
 }
 
