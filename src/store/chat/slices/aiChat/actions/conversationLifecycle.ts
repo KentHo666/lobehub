@@ -364,6 +364,123 @@ export class ConversationLifecycleActionImpl {
       }
     }
 
+    // ── ACP mode: delegate to external agent via ACP protocol (desktop only) ──
+    const chatConfig = agentSelectors.getAgentConfigById(agentId)(getAgentStoreState()).chatConfig;
+    if (chatConfig?.agentProvider?.type === 'acp') {
+      // Persist messages to DB first (same as client mode)
+      let acpData: SendMessageServerResponse | undefined;
+      try {
+        const { model, provider } =
+          agentSelectors.getAgentConfigById(agentId)(getAgentStoreState());
+        acpData = await aiChatService.sendMessageInServer(
+          {
+            agentId: operationContext.agentId,
+            groupId: operationContext.groupId ?? undefined,
+            newAssistantMessage: { model, provider: provider! },
+            newTopic: !operationContext.topicId
+              ? {
+                  title: message.slice(0, 20) || t('defaultTitle', { ns: 'topic' }),
+                  topicMessageIds: messages.map((m) => m.id),
+                }
+              : undefined,
+            newUserMessage: {
+              content: message,
+              editorData,
+              files: fileIdList,
+              pageSelections,
+              parentId,
+            },
+            threadId: operationContext.threadId ?? undefined,
+            topicId: operationContext.topicId ?? undefined,
+          },
+          abortController,
+        );
+      } catch (e) {
+        console.error('[ACP] Failed to persist messages:', e);
+        this.#get().failOperation(operationId, {
+          message: e instanceof Error ? e.message : 'Unknown error',
+          type: 'ACPError',
+        });
+        return;
+      }
+
+      if (!acpData) return;
+
+      // Update context with server-created topicId
+      const acpContext = {
+        ...operationContext,
+        topicId: acpData.topicId ?? operationContext.topicId,
+      };
+
+      // Replace optimistic messages with persisted ones
+      this.#get().replaceMessages(acpData.messages, {
+        action: 'sendMessage/serverResponse',
+        context: acpContext,
+      });
+
+      // Handle new topic creation
+      if (acpData.isCreateNewTopic && acpData.topicId) {
+        if (acpData.topics) {
+          const pageSize = systemStatusSelectors.topicPageSize(useGlobalStore.getState());
+          this.#get().internal_updateTopics(operationContext.agentId, {
+            groupId: operationContext.groupId,
+            items: acpData.topics.items,
+            pageSize,
+            total: acpData.topics.total,
+          });
+        }
+        await this.#get().switchTopic(acpData.topicId, {
+          clearNewKey: true,
+          skipRefreshMessage: true,
+        });
+      }
+
+      // Clean up temp messages
+      this.#get().internal_dispatchMessage(
+        { ids: [tempId, tempAssistantId], type: 'deleteMessages' },
+        { operationId },
+      );
+
+      // Complete sendMessage operation, start ACP execution as child operation
+      this.#get().completeOperation(operationId);
+
+      if (acpData.topicId) this.#get().internal_updateTopicLoading(acpData.topicId, true);
+
+      // Start ACP execution
+      const { operationId: acpOpId } = this.#get().startOperation({
+        context: acpContext,
+        label: 'ACP Agent Execution',
+        parentOperationId: operationId,
+        type: 'execAgentRuntime',
+      });
+
+      this.#get().associateMessageWithOperation(acpData.assistantMessageId, acpOpId);
+
+      try {
+        const { executeACPAgent } = await import('./acpExecutor');
+        await executeACPAgent(() => this.#get(), {
+          agentProvider: chatConfig.agentProvider,
+          assistantMessageId: acpData.assistantMessageId,
+          context: acpContext,
+          message,
+          operationId: acpOpId,
+        });
+      } catch (e) {
+        console.error('[ACP] Agent execution failed:', e);
+        this.#get().failOperation(acpOpId, {
+          message: e instanceof Error ? e.message : 'Unknown error',
+          type: 'ACPError',
+        });
+      }
+
+      if (acpData.topicId) this.#get().internal_updateTopicLoading(acpData.topicId, false);
+
+      return {
+        assistantMessageId: acpData.assistantMessageId,
+        userMessageId: acpData.userMessageId,
+      };
+    }
+
     // ── Client mode: send via server API then run agent locally ──
     let data: SendMessageServerResponse | undefined;
     try {

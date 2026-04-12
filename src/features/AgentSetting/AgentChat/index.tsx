@@ -1,10 +1,11 @@
 'use client';
 
+import { isDesktop } from '@lobechat/const';
 import { type FormGroupItemType } from '@lobehub/ui';
 import { Form, SliderWithInput } from '@lobehub/ui';
-import { Switch } from 'antd';
+import { Input, Switch } from 'antd';
 import isEqual from 'fast-deep-equal';
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { FORM_STYLE } from '@/const/layoutTokens';
@@ -16,6 +17,29 @@ const AgentChat = memo(() => {
   const [form] = Form.useForm();
   const updateConfig = useStore((s) => s.setChatConfig);
   const config = useStore(selectors.currentChatConfig, isEqual);
+
+  const isACPEnabled = !!config.agentProvider?.type;
+
+  const handleFinish = useCallback(
+    (values: any) => {
+      // Handle the agentProvider toggle: if disabled, clear the agentProvider config
+      if (values._acpEnabled === false || values._acpEnabled === undefined) {
+        const { _acpEnabled, _acpCommand, _acpWorkingDirectory, ...rest } = values;
+        updateConfig({ ...rest, agentProvider: undefined });
+      } else {
+        const { _acpEnabled, _acpCommand, _acpWorkingDirectory, ...rest } = values;
+        updateConfig({
+          ...rest,
+          agentProvider: {
+            command: _acpCommand || 'claude',
+            type: 'acp' as const,
+            workingDirectory: _acpWorkingDirectory || undefined,
+          },
+        });
+      }
+    },
+    [updateConfig],
+  );
 
   const chat: FormGroupItemType = {
     children: [
@@ -74,15 +98,56 @@ const AgentChat = memo(() => {
     title: t('settingChat.title'),
   };
 
+  const agentProvider: FormGroupItemType = {
+    children: [
+      {
+        children: <Switch />,
+        desc: t('settingChat.agentProvider.desc'),
+        label: t('settingChat.agentProvider.toggle.title'),
+        layout: 'horizontal',
+        minWidth: undefined,
+        name: '_acpEnabled',
+        valuePropName: 'checked',
+      },
+      {
+        children: <Input placeholder={t('settingChat.agentProvider.command.placeholder')} />,
+        desc: t('settingChat.agentProvider.command.desc'),
+        divider: false,
+        hidden: !isACPEnabled,
+        label: t('settingChat.agentProvider.command.title'),
+        name: '_acpCommand',
+      },
+      {
+        children: (
+          <Input placeholder={t('settingChat.agentProvider.workingDirectory.placeholder')} />
+        ),
+        desc: t('settingChat.agentProvider.workingDirectory.desc'),
+        divider: false,
+        hidden: !isACPEnabled,
+        label: t('settingChat.agentProvider.workingDirectory.title'),
+        name: '_acpWorkingDirectory',
+      },
+    ],
+    title: t('settingChat.agentProvider.title'),
+  };
+
+  // Build form groups — only show ACP settings on desktop
+  const formGroups = isDesktop ? [chat, agentProvider] : [chat];
+
   return (
     <Form
       footer={<Form.SubmitFooter />}
       form={form}
-      initialValues={config}
-      items={[chat]}
+      items={formGroups}
       itemsType={'group'}
       variant={'borderless'}
-      onFinish={updateConfig}
+      initialValues={{
+        ...config,
+        _acpCommand: config.agentProvider?.command || 'claude',
+        _acpEnabled: isACPEnabled,
+        _acpWorkingDirectory: config.agentProvider?.workingDirectory || '',
+      }}
+      onFinish={handleFinish}
       {...FORM_STYLE}
     />
   );

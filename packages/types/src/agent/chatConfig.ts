@@ -17,7 +17,30 @@ export interface AgentMemoryChatConfig {
   };
 }
 
+/**
+ * External agent provider configuration (ACP, Dify, etc.)
+ * When set, the assistant delegates execution to the external agent
+ * instead of using the built-in model runtime.
+ */
+export interface AgentProviderConfig {
+  /** Additional CLI arguments for the agent command */
+  args?: string[];
+  /** Command to spawn the agent (e.g. 'claude') */
+  command?: string;
+  /** Custom environment variables */
+  env?: Record<string, string>;
+  /** Protocol type */
+  type: 'acp';
+  /** Working directory for the agent */
+  workingDirectory?: string;
+}
+
 export interface LobeAgentChatConfig extends AgentMemoryChatConfig {
+  /**
+   * External agent provider (ACP protocol)
+   * When set, execution is delegated to the external agent
+   */
+  agentProvider?: AgentProviderConfig;
   autoCreateTopicThreshold: number;
   codexMaxReasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   /**
