@@ -257,6 +257,21 @@ export const executeACPAgent = async (
    * ACP has no server so we persist at onComplete. */
   let accumulatedContent = '';
   let accumulatedReasoning = '';
+  /** Extracted model + usage from each assistant event (used for final write) */
+  let lastModel: string | undefined;
+  const accumulatedUsage: Record<string, number> = {
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+  };
+  /**
+   * Deferred terminal event (agent_runtime_end or error). We don't forward
+   * these to the gateway handler immediately because handler triggers
+   * fetchAndReplaceMessages which would clobber our in-flight content
+   * writes with stale DB state. onComplete forwards after persistence.
+   */
+  let deferredTerminalEvent: HeterogeneousAgentEvent | null = null;
 
   try {
     // Start session
@@ -290,6 +305,30 @@ export const executeACPAgent = async (
             continue;
           }
 
+          // ─── step_complete with turn_metadata: capture model + usage ───
+          if (event.type === 'step_complete' && event.data?.phase === 'turn_metadata') {
+            if (event.data.model) lastModel = event.data.model;
+            if (event.data.usage) {
+              // Accumulate token usage across all turns
+              accumulatedUsage.input_tokens += event.data.usage.input_tokens || 0;
+              accumulatedUsage.output_tokens += event.data.usage.output_tokens || 0;
+              accumulatedUsage.cache_creation_input_tokens +=
+                event.data.usage.cache_creation_input_tokens || 0;
+              accumulatedUsage.cache_read_input_tokens +=
+                event.data.usage.cache_read_input_tokens || 0;
+            }
+            // Don't forward turn metadata — it's internal bookkeeping
+            continue;
+          }
+
+          // ─── Defer terminal events so content writes complete first ───
+          // Gateway handler's agent_runtime_end/error triggers fetchAndReplaceMessages,
+          // which would read stale DB state (before we persist final content + usage).
+          if (event.type === 'agent_runtime_end' || event.type === 'error') {
+            deferredTerminalEvent = event;
+            continue;
+          }
+
           // ─── stream_chunk: accumulate content + persist tool_use ───
           if (event.type === 'stream_chunk') {
             const chunk = event.data;
@@ -318,21 +357,42 @@ export const executeACPAgent = async (
         if (completed) return;
         completed = true;
 
-        // Flush any remaining adapter state
+        // Flush remaining adapter state (e.g., still-open tool_end events — but
+        // NOT agent_runtime_end; that's deferred below)
         const flushEvents = adapter.flush();
         for (const event of flushEvents) {
+          if (event.type === 'agent_runtime_end' || event.type === 'error') {
+            deferredTerminalEvent = event;
+            continue;
+          }
           eventHandler(toStreamEvent(event, operationId));
         }
 
         // Wait for all tool persistence to finish before writing final state
         await persistQueue.catch(console.error);
 
-        // Persist accumulated content/reasoning to the single assistant message
-        if (accumulatedContent || accumulatedReasoning) {
-          const updateValue: Record<string, any> = {};
-          if (accumulatedContent) updateValue.content = accumulatedContent;
-          if (accumulatedReasoning) updateValue.reasoning = { content: accumulatedReasoning };
+        // Persist final content + reasoning + model + usage to the assistant message
+        // BEFORE the terminal event triggers fetchAndReplaceMessages.
+        const updateValue: Record<string, any> = {};
+        if (accumulatedContent) updateValue.content = accumulatedContent;
+        if (accumulatedReasoning) updateValue.reasoning = { content: accumulatedReasoning };
+        if (lastModel) updateValue.model = lastModel;
+        if (accumulatedUsage.input_tokens + accumulatedUsage.output_tokens > 0) {
+          updateValue.metadata = {
+            totalInputTokens:
+              accumulatedUsage.input_tokens +
+              accumulatedUsage.cache_creation_input_tokens +
+              accumulatedUsage.cache_read_input_tokens,
+            totalOutputTokens: accumulatedUsage.output_tokens,
+            totalTokens:
+              accumulatedUsage.input_tokens +
+              accumulatedUsage.output_tokens +
+              accumulatedUsage.cache_creation_input_tokens +
+              accumulatedUsage.cache_read_input_tokens,
+          };
+        }
 
+        if (Object.keys(updateValue).length > 0) {
           await messageService
             .updateMessage(assistantMessageId, updateValue, {
               agentId: context.agentId,
@@ -341,21 +401,15 @@ export const executeACPAgent = async (
             .catch(console.error);
         }
 
-        // Now emit agent_runtime_end — handler will fetchAndReplaceMessages from DB
-        const hasEnd = flushEvents.some((e) => e.type === 'agent_runtime_end');
-        if (!hasEnd) {
-          eventHandler(
-            toStreamEvent(
-              {
-                data: {},
-                stepIndex: 0,
-                timestamp: Date.now(),
-                type: 'agent_runtime_end',
-              },
-              operationId,
-            ),
-          );
-        }
+        // NOW forward the deferred terminal event — handler will fetchAndReplaceMessages
+        // and pick up the final persisted state.
+        const terminal = deferredTerminalEvent ?? {
+          data: {},
+          stepIndex: 0,
+          timestamp: Date.now(),
+          type: 'agent_runtime_end' as const,
+        };
+        eventHandler(toStreamEvent(terminal, operationId));
       },
 
       onError: async (error) => {

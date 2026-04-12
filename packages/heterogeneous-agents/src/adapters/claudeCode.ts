@@ -109,7 +109,24 @@ export class ClaudeCodeAdapter implements AgentEventAdapter {
 
     if (!this.started) {
       this.started = true;
-      events.push(this.makeEvent('stream_start', { provider: 'acp-agent' }));
+      events.push(
+        this.makeEvent('stream_start', {
+          model: raw.message?.model,
+          provider: 'acp-agent',
+        }),
+      );
+    }
+
+    // Per-turn model + usage snapshot — emitted as 'step_complete'-like
+    // metadata event so executor can track latest model and accumulated usage.
+    if (raw.message?.model || raw.message?.usage) {
+      events.push(
+        this.makeEvent('step_complete', {
+          model: raw.message?.model,
+          phase: 'turn_metadata',
+          usage: raw.message?.usage,
+        }),
+      );
     }
 
     // NOTE: Claude Code stream-json may produce multiple events sharing the same
