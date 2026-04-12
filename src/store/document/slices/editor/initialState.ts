@@ -27,6 +27,10 @@ export interface EditorContentState {
    */
   editorData: any;
   /**
+   * Current persisted head version for this document
+   */
+  headVersion?: number;
+  /**
    * Whether there are unsaved changes
    */
   isDirty: boolean;
@@ -87,6 +91,7 @@ export const createInitialEditorContentState = (
 ): EditorContentState => ({
   content: '',
   editorData: null,
+  headVersion: 1,
   isDirty: false,
   lastSavedContent: '',
   lastSavedEditorData: null,

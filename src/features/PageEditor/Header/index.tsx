@@ -6,12 +6,12 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DESKTOP_HEADER_ICON_SIZE } from '@/const/layoutTokens';
-import { AutoSaveHint } from '@/features/EditorCanvas';
 import NavHeader from '@/features/NavHeader';
 import ToggleRightPanelButton from '@/features/RightPanel/ToggleRightPanelButton';
 
 import { usePageEditorStore } from '../store';
 import Breadcrumb from './Breadcrumb';
+import DocumentVersionControl from './DocumentVersionControl';
 import { useMenu } from './useMenu';
 
 const Header = memo(() => {
@@ -43,8 +43,7 @@ const Header = memo(() => {
               </Text>
             </>
           )}
-          {/* Auto Save Status */}
-          {documentId && <AutoSaveHint documentId={documentId} style={{ marginLeft: 6 }} />}
+          {documentId && <DocumentVersionControl documentId={documentId} />}
         </>
       }
       right={

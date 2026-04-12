@@ -27,12 +27,30 @@ type DatabaseLike = LobeChatDatabase | Transaction;
 type PersistedDocumentHistory = {
   baseVersion: number | null;
   documentId: string;
+  id?: string;
   payload: Record<string, any> | Array<Record<string, any>>;
   saveSource: DocumentHistorySaveSource;
   savedAt: Date;
   storageKind: Exclude<DocumentHistoryStorageKind, 'head'>;
   version: number;
 };
+
+interface RewriteDocumentHistoryOptions {
+  dryRun?: boolean;
+  forceRewrite?: boolean;
+  limit?: number;
+}
+
+interface RewriteDocumentHistoryResult {
+  afterPatchCount: number;
+  afterSnapshotCount: number;
+  beforePatchCount: number;
+  beforeSnapshotCount: number;
+  documentId: string;
+  retainedRows: number;
+  rewritten: boolean;
+  trimmedRows: number;
+}
 
 const getDocumentVersion = (document: DocumentItem | undefined) => {
   if (!document) return 0;
@@ -110,6 +128,7 @@ export class DocumentHistoryService {
     await this.db.insert(documentHistories).values({
       baseVersion: nextEntry.baseVersion ?? undefined,
       documentId: nextEntry.documentId,
+      id: nextEntry.id,
       payload: nextEntry.payload,
       saveSource: nextEntry.saveSource,
       savedAt: nextEntry.savedAt,
@@ -134,89 +153,15 @@ export class DocumentHistoryService {
   };
 
   compactHistory = async (documentId: string, limit = DOCUMENT_HISTORY_LIMIT) => {
-    const allRows = await this.db.query.documentHistories.findMany({
-      orderBy: [desc(documentHistories.version)],
-      where: and(
-        eq(documentHistories.documentId, documentId),
-        eq(documentHistories.userId, this.userId),
-      ),
-    });
+    await this.rewriteHistory(documentId, { limit });
+  };
 
-    if (allRows.length <= limit) return;
-
-    const retainedRows = allRows
-      .slice(0, limit)
-      .sort((left, right) => left.version - right.version);
-    const resolvedVersions = new Map<number, Record<string, any>>();
-
-    for (const row of retainedRows) {
-      const resolved = await this.resolveRow(row, allRows, resolvedVersions);
-      resolvedVersions.set(row.version, resolved);
-    }
-
-    await this.db
-      .delete(documentHistories)
-      .where(
-        and(
-          eq(documentHistories.documentId, documentId),
-          eq(documentHistories.userId, this.userId),
-        ),
-      );
-
-    let currentSnapshotVersion: number | null = null;
-    let currentSnapshotPayload: Record<string, any> | null = null;
-
-    for (const [index, row] of retainedRows.entries()) {
-      const editorData = resolvedVersions.get(row.version)!;
-      const forceSnapshot =
-        index === 0 || index % DOCUMENT_HISTORY_SNAPSHOT_INTERVAL === 0 || !currentSnapshotPayload;
-
-      const patch =
-        forceSnapshot || !currentSnapshotPayload
-          ? []
-          : createJsonPatch(currentSnapshotPayload, editorData);
-
-      const shouldSnapshot =
-        forceSnapshot ||
-        patch.length === 0 ||
-        isOversizedJsonPatch(patch, editorData, DOCUMENT_HISTORY_PATCH_THRESHOLD);
-
-      const persistedRow: PersistedDocumentHistory = shouldSnapshot
-        ? {
-            baseVersion: null,
-            documentId,
-            payload: structuredClone(editorData),
-            saveSource: row.saveSource as DocumentHistorySaveSource,
-            savedAt: row.savedAt,
-            storageKind: 'snapshot',
-            version: row.version,
-          }
-        : {
-            baseVersion: currentSnapshotVersion,
-            documentId,
-            payload: patch,
-            saveSource: row.saveSource as DocumentHistorySaveSource,
-            savedAt: row.savedAt,
-            storageKind: 'patch',
-            version: row.version,
-          };
-
-      await this.db.insert(documentHistories).values({
-        baseVersion: persistedRow.baseVersion ?? undefined,
-        documentId: persistedRow.documentId,
-        payload: persistedRow.payload,
-        saveSource: persistedRow.saveSource,
-        savedAt: persistedRow.savedAt,
-        storageKind: persistedRow.storageKind,
-        userId: this.userId,
-        version: persistedRow.version,
-      });
-
-      if (persistedRow.storageKind === 'snapshot') {
-        currentSnapshotPayload = structuredClone(editorData);
-        currentSnapshotVersion = row.version;
-      }
-    }
+  rebuildHistory = async (
+    documentId: string,
+    limit = DOCUMENT_HISTORY_LIMIT,
+    options?: Pick<RewriteDocumentHistoryOptions, 'dryRun'>,
+  ): Promise<RewriteDocumentHistoryResult> => {
+    return this.rewriteHistory(documentId, { dryRun: options?.dryRun, forceRewrite: true, limit });
   };
 
   getDocumentHistoryVersion = async (
@@ -400,6 +345,193 @@ export class DocumentHistoryService {
 
     cache.set(row.version, resolved);
     return resolved;
+  };
+
+  private buildPersistedRows = (
+    documentId: string,
+    retainedRows: Array<{
+      id: string;
+      saveSource: string;
+      savedAt: Date;
+      version: number;
+    }>,
+    resolvedVersions: Map<number, Record<string, any>>,
+  ) => {
+    const persistedRows: PersistedDocumentHistory[] = [];
+    let currentSnapshotVersion: number | null = null;
+    let currentSnapshotPayload: Record<string, any> | null = null;
+
+    for (const [index, row] of retainedRows.entries()) {
+      const editorData = resolvedVersions.get(row.version)!;
+      const forceSnapshot =
+        index === 0 || index % DOCUMENT_HISTORY_SNAPSHOT_INTERVAL === 0 || !currentSnapshotPayload;
+
+      const patch =
+        forceSnapshot || !currentSnapshotPayload
+          ? []
+          : createJsonPatch(currentSnapshotPayload, editorData);
+
+      const shouldSnapshot =
+        forceSnapshot ||
+        patch.length === 0 ||
+        isOversizedJsonPatch(patch, editorData, DOCUMENT_HISTORY_PATCH_THRESHOLD);
+
+      const persistedRow: PersistedDocumentHistory = shouldSnapshot
+        ? {
+            baseVersion: null,
+            documentId,
+            id: row.id,
+            payload: structuredClone(editorData),
+            saveSource: row.saveSource as DocumentHistorySaveSource,
+            savedAt: row.savedAt,
+            storageKind: 'snapshot',
+            version: row.version,
+          }
+        : {
+            baseVersion: currentSnapshotVersion,
+            documentId,
+            id: row.id,
+            payload: patch,
+            saveSource: row.saveSource as DocumentHistorySaveSource,
+            savedAt: row.savedAt,
+            storageKind: 'patch',
+            version: row.version,
+          };
+
+      persistedRows.push(persistedRow);
+
+      if (persistedRow.storageKind === 'snapshot') {
+        currentSnapshotPayload = structuredClone(editorData);
+        currentSnapshotVersion = row.version;
+      }
+    }
+
+    return persistedRows;
+  };
+
+  private findAllRows = async (documentId: string) => {
+    return this.db.query.documentHistories.findMany({
+      orderBy: [desc(documentHistories.version)],
+      where: and(
+        eq(documentHistories.documentId, documentId),
+        eq(documentHistories.userId, this.userId),
+      ),
+    });
+  };
+
+  private getStorageKindCounts = (
+    rows: Array<{
+      storageKind: string;
+    }>,
+  ) => {
+    return rows.reduce(
+      (result, row) => {
+        if (row.storageKind === 'patch') result.patchCount += 1;
+        if (row.storageKind === 'snapshot') result.snapshotCount += 1;
+
+        return result;
+      },
+      { patchCount: 0, snapshotCount: 0 },
+    );
+  };
+
+  private rewriteHistory = async (
+    documentId: string,
+    options: RewriteDocumentHistoryOptions = {},
+  ): Promise<RewriteDocumentHistoryResult> => {
+    const allRows = await this.findAllRows(documentId);
+    const limit = options.limit ?? DOCUMENT_HISTORY_LIMIT;
+
+    if (allRows.length === 0) {
+      return {
+        afterPatchCount: 0,
+        afterSnapshotCount: 0,
+        beforePatchCount: 0,
+        beforeSnapshotCount: 0,
+        documentId,
+        retainedRows: 0,
+        rewritten: false,
+        trimmedRows: 0,
+      };
+    }
+
+    const retainedRows = allRows
+      .slice(0, limit)
+      .sort((left, right) => left.version - right.version);
+    const trimmedRows = Math.max(allRows.length - retainedRows.length, 0);
+
+    if (!options.forceRewrite && trimmedRows === 0) {
+      const currentCounts = this.getStorageKindCounts(retainedRows);
+
+      return {
+        afterPatchCount: currentCounts.patchCount,
+        afterSnapshotCount: currentCounts.snapshotCount,
+        beforePatchCount: currentCounts.patchCount,
+        beforeSnapshotCount: currentCounts.snapshotCount,
+        documentId,
+        retainedRows: retainedRows.length,
+        rewritten: false,
+        trimmedRows,
+      };
+    }
+
+    const resolvedVersions = new Map<number, Record<string, any>>();
+
+    for (const row of retainedRows) {
+      const resolved = await this.resolveRow(row, allRows, resolvedVersions);
+      resolvedVersions.set(row.version, resolved);
+    }
+
+    const persistedRows = this.buildPersistedRows(documentId, retainedRows, resolvedVersions);
+    const beforeCounts = this.getStorageKindCounts(retainedRows);
+    const afterCounts = this.getStorageKindCounts(persistedRows);
+
+    if (options.dryRun) {
+      return {
+        afterPatchCount: afterCounts.patchCount,
+        afterSnapshotCount: afterCounts.snapshotCount,
+        beforePatchCount: beforeCounts.patchCount,
+        beforeSnapshotCount: beforeCounts.snapshotCount,
+        documentId,
+        retainedRows: retainedRows.length,
+        rewritten: true,
+        trimmedRows,
+      };
+    }
+
+    await this.db
+      .delete(documentHistories)
+      .where(
+        and(
+          eq(documentHistories.documentId, documentId),
+          eq(documentHistories.userId, this.userId),
+        ),
+      );
+
+    for (const row of persistedRows) {
+      await this.db.insert(documentHistories).values({
+        baseVersion: row.baseVersion ?? undefined,
+        documentId: row.documentId,
+        id: row.id,
+        payload: row.payload,
+        saveSource: row.saveSource,
+        savedAt: row.savedAt,
+        storageKind: row.storageKind,
+        userId: this.userId,
+        version: row.version,
+      });
+    }
+
+    return {
+      afterPatchCount: afterCounts.patchCount,
+      afterSnapshotCount: afterCounts.snapshotCount,
+      beforePatchCount: beforeCounts.patchCount,
+      beforeSnapshotCount: beforeCounts.snapshotCount,
+      documentId,
+      retainedRows: retainedRows.length,
+      rewritten: true,
+      trimmedRows,
+    };
   };
 
   private shouldStoreSnapshot = (

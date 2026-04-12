@@ -42,7 +42,7 @@ export interface DocumentHistoryClientSurface {
     uniqueKey?: string,
   ) => Promise<GetHistoryVersionOutput>;
   listDocumentHistory: (params: ListDocumentHistoryParams) => Promise<ListHistoryOutput>;
-  updateDocument: (params: UpdateDocumentParams) => Promise<UpdateDocumentOutput | void>;
+  updateDocument: (params: UpdateDocumentParams) => Promise<UpdateDocumentOutput>;
 }
 
 export class DocumentService {

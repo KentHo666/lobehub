@@ -89,7 +89,7 @@ const DocumentIdMode = memo<DocumentIdModeProps>(
       if (!shouldGuardUnsavedChanges) return true;
 
       handleContentChangeStore();
-      await performSave(documentId);
+      await performSave(documentId, undefined, { saveSource: 'system' });
 
       const latestDocument = useDocumentStore.getState().documents[documentId];
       return latestDocument ? !latestDocument.isDirty : true;

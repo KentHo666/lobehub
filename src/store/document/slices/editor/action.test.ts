@@ -2,13 +2,14 @@ import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { EMPTY_EDITOR_STATE } from '@/libs/editor/constants';
+import { documentService } from '@/services/document';
 
 import { useDocumentStore } from '../../store';
 
 // Mock services
 vi.mock('@/services/document', () => ({
   documentService: {
-    updateDocument: vi.fn().mockResolvedValue({}),
+    updateDocument: vi.fn().mockResolvedValue({ historyAppended: false, id: 'doc-1', version: 1 }),
   },
 }));
 
@@ -30,6 +31,12 @@ const createMockEditor = () => ({
 
 describe('DocumentStore - Editor Actions', () => {
   beforeEach(() => {
+    vi.mocked(documentService.updateDocument).mockResolvedValue({
+      historyAppended: false,
+      id: 'doc-1',
+      version: 1,
+    });
+
     // Reset store state before each test
     const { result } = renderHook(() => useDocumentStore());
     act(() => {
@@ -135,6 +142,22 @@ describe('DocumentStore - Editor Actions', () => {
       expect(result.current.documents['doc-1'].editorData).toEqual(editorData);
       // Should NOT call setDocument - that happens in onEditorInit
       expect(mockEditor.setDocument).not.toHaveBeenCalled();
+    });
+
+    it('should initialize headVersion from fetched document data', () => {
+      const { result } = renderHook(() => useDocumentStore());
+      const mockEditor = createMockEditor() as any;
+
+      act(() => {
+        result.current.initDocumentWithEditor({
+          documentId: 'doc-1',
+          editor: mockEditor,
+          headVersion: 12,
+          sourceType: 'page',
+        });
+      });
+
+      expect(result.current.documents['doc-1'].headVersion).toBe(12);
     });
   });
 
@@ -389,6 +412,86 @@ describe('DocumentStore - Editor Actions', () => {
           result.current.flushSave();
         });
       }).not.toThrow();
+    });
+  });
+
+  describe('performSave', () => {
+    it('should save metadata-only updates and keep headVersion unchanged when history is not appended', async () => {
+      const { result } = renderHook(() => useDocumentStore());
+      const mockEditor = createMockEditor() as any;
+
+      vi.mocked(documentService.updateDocument).mockResolvedValue({
+        historyAppended: false,
+        id: 'doc-1',
+        version: 3,
+      });
+
+      act(() => {
+        result.current.initDocumentWithEditor({
+          content: '# Test',
+          documentId: 'doc-1',
+          editor: mockEditor,
+          headVersion: 3,
+          sourceType: 'page',
+        });
+      });
+
+      await act(async () => {
+        await result.current.performSave(
+          'doc-1',
+          { title: 'Updated Title' },
+          { saveSource: 'autosave' },
+        );
+      });
+
+      expect(documentService.updateDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'doc-1',
+          saveSource: 'autosave',
+          title: 'Updated Title',
+        }),
+      );
+      expect(result.current.documents['doc-1'].headVersion).toBe(3);
+    });
+
+    it('should pass restore metadata through updateDocument and update headVersion after success', async () => {
+      const { result } = renderHook(() => useDocumentStore());
+      const mockEditor = createMockEditor() as any;
+
+      vi.mocked(documentService.updateDocument).mockResolvedValue({
+        historyAppended: true,
+        id: 'doc-1',
+        version: 7,
+      });
+
+      act(() => {
+        result.current.initDocumentWithEditor({
+          content: '# Test',
+          documentId: 'doc-1',
+          editor: mockEditor,
+          headVersion: 4,
+          sourceType: 'page',
+        });
+        result.current.markDirty('doc-1');
+      });
+
+      await act(async () => {
+        await result.current.performSave('doc-1', undefined, {
+          restoreFromVersion: 2,
+          saveSource: 'restore',
+        });
+      });
+
+      expect(documentService.updateDocument).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '# Test',
+          id: 'doc-1',
+          restoreFromVersion: 2,
+          saveSource: 'restore',
+        }),
+      );
+      expect(result.current.documents['doc-1'].headVersion).toBe(7);
+      expect(result.current.documents['doc-1'].isDirty).toBe(false);
     });
   });
 });

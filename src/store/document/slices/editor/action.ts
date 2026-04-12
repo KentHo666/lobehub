@@ -23,6 +23,11 @@ export interface SaveMetadata {
   title?: string;
 }
 
+export interface SaveExecutionOptions {
+  restoreFromVersion?: number;
+  saveSource?: 'autosave' | 'manual' | 'restore' | 'system';
+}
+
 type Setter = StoreSetter<DocumentStore>;
 export const createEditorSlice = (set: Setter, get: () => DocumentStore, _api?: unknown) =>
   new EditorActionImpl(set, get, _api);
@@ -143,7 +148,11 @@ export class EditorActionImpl {
     this.#set({ editor });
   };
 
-  performSave = async (documentId?: string, metadata?: SaveMetadata): Promise<void> => {
+  performSave = async (
+    documentId?: string,
+    metadata?: SaveMetadata,
+    options?: SaveExecutionOptions,
+  ): Promise<void> => {
     const id = documentId || this.#get().activeDocumentId;
 
     if (!id) return;
@@ -152,8 +161,10 @@ export class EditorActionImpl {
     const doc = documents[id];
     if (!doc || !editor) return;
 
-    // Skip save if no changes
-    if (!doc.isDirty) return;
+    const hasMetadataChanges = metadata?.emoji !== undefined || metadata?.title !== undefined;
+
+    // Skip save if neither document content nor metadata changed
+    if (!doc.isDirty && !hasMetadataChanges) return;
 
     // Update save status
     internal_dispatchDocument({ id, type: 'updateDocument', value: { saveStatus: 'saving' } });
@@ -163,11 +174,13 @@ export class EditorActionImpl {
       const currentEditorData = editor.getDocument('json');
 
       // Save document
-      await documentService.updateDocument({
+      const result = await documentService.updateDocument({
         content: currentContent,
         editorData: JSON.stringify(currentEditorData),
         id,
         metadata: metadata?.emoji ? { emoji: metadata.emoji } : undefined,
+        restoreFromVersion: options?.restoreFromVersion,
+        saveSource: options?.saveSource,
         title: metadata?.title,
       });
 
@@ -177,6 +190,7 @@ export class EditorActionImpl {
         type: 'updateDocument',
         value: {
           editorData: structuredClone(currentEditorData),
+          headVersion: result.version,
           isDirty: false,
           lastSavedContent: currentContent,
           lastSavedEditorData: structuredClone(currentEditorData),
