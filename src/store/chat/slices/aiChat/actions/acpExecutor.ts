@@ -115,8 +115,35 @@ const persistNewToolCalls = async (
   const freshTools = incoming.filter((t) => !state.persistedIds.has(t.id));
   if (freshTools.length === 0) return;
 
+  // Mark all fresh tools as persisted up front, so re-entrant calls (from
+  // Claude Code echoing tool_use blocks) are safely deduped.
+  for (const tool of freshTools) state.persistedIds.add(tool.id);
+
+  // ─── PHASE 1: Write tools[] to assistant FIRST, WITHOUT result_msg_id ───
+  //
+  // LobeHub's conversation-flow parser filters tool messages by matching
+  // `tool.tool_call_id` against `assistant.tools[].id`. If a tool message
+  // exists in DB but no matching entry exists in assistant.tools[], the UI
+  // renders an "orphan" warning telling the user to delete it.
+  //
+  // By writing assistant.tools[] FIRST (with the tool ids but no result_msg_id
+  // yet), the match works from the moment tool messages get created in DB.
+  // No orphan window.
+  for (const tool of freshTools) state.payloads.push({ ...tool });
+  try {
+    await messageService.updateMessage(
+      assistantMessageId,
+      { tools: state.payloads },
+      { agentId: context.agentId, topicId: context.topicId },
+    );
+  } catch (err) {
+    console.error('[ACP] Failed to pre-register assistant tools:', err);
+  }
+
+  // ─── PHASE 2: Create the tool messages in DB ───
+  // Each tool message's tool_call_id matches an already-registered tool id
+  // in assistant.tools[], so UI never sees orphan state.
   for (const tool of freshTools) {
-    state.persistedIds.add(tool.id);
     try {
       const result = await messageService.createMessage({
         agentId: context.agentId,
@@ -133,24 +160,24 @@ const persistNewToolCalls = async (
         topicId: context.topicId ?? undefined,
       });
       state.toolMsgIdByCallId.set(tool.id, result.id);
-      state.payloads.push({ ...tool, result_msg_id: result.id });
+      // Back-fill result_msg_id onto the payload we pushed in PHASE 1
+      const entry = state.payloads.find((p) => p.id === tool.id);
+      if (entry) entry.result_msg_id = result.id;
     } catch (err) {
       console.error('[ACP] Failed to create tool message:', err);
-      state.payloads.push(tool);
     }
   }
 
+  // ─── PHASE 3: Re-write assistant.tools[] with the result_msg_ids ───
+  // Without this, the UI can't hydrate tool results back into the inspector.
   try {
     await messageService.updateMessage(
       assistantMessageId,
       { tools: state.payloads },
-      {
-        agentId: context.agentId,
-        topicId: context.topicId,
-      },
+      { agentId: context.agentId, topicId: context.topicId },
     );
   } catch (err) {
-    console.error('[ACP] Failed to update assistant tools:', err);
+    console.error('[ACP] Failed to finalize assistant tools:', err);
   }
 };
 
