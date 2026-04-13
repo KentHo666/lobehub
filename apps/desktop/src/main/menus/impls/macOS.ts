@@ -145,6 +145,12 @@ export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
             label: t('file.newPage'),
           },
           { type: 'separator' },
+          {
+            accelerator: 'Shift+Command+X',
+            click: () => this.app.screenCaptureManager.startSession(),
+            label: t('tray.captureScreen'),
+          },
+          { type: 'separator' },
           { label: t('window.close'), role: 'close' },
         ],
       },
@@ -650,6 +656,10 @@ export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
       {
         click: () => this.app.browserManager.showMainWindow(),
         label: t('tray.show', { appName }),
+      },
+      {
+        click: () => this.app.screenCaptureManager.startSession(),
+        label: t('tray.captureScreen'),
       },
       {
         click: async () => {

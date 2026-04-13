@@ -14,6 +14,7 @@ import { ELECTRON_BE_PROTOCOL_SCHEME } from '@/const/protocol';
 import type { IControlModule } from '@/controllers';
 import AuthCtr from '@/controllers/AuthCtr';
 import { generateCliWrapper, getCliWrapperDir } from '@/modules/cliEmbedding';
+import { ScreenCaptureManager } from '@/modules/screenCapture/ScreenCaptureManager';
 import {
   astSearchDetectors,
   browserAutomationDetectors,
@@ -61,6 +62,7 @@ export class App {
   protocolManager: ProtocolManager;
   rendererUrlManager: RendererUrlManager;
   toolDetectorManager: ToolDetectorManager;
+  screenCaptureManager: ScreenCaptureManager;
   chromeFlags: string[] = ['OverlayScrollbar', 'FluentOverlayScrollbar', 'FluentScrollbar'];
 
   /**
@@ -140,6 +142,7 @@ export class App {
     this.staticFileServerManager = new StaticFileServerManager(this);
     this.protocolManager = new ProtocolManager(this);
     this.toolDetectorManager = new ToolDetectorManager(this);
+    this.screenCaptureManager = new ScreenCaptureManager(this);
 
     // Register built-in tool detectors
     this.registerBuiltinToolDetectors();

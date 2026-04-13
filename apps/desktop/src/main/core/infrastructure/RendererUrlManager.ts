@@ -14,6 +14,7 @@ const logger = createLogger('core:RendererUrlManager');
 // Vite build with root=monorepo preserves input path structure,
 // so index.html ends up at apps/desktop/index.html in outDir.
 const SPA_ENTRY_HTML = join(rendererDir, 'apps', 'desktop', 'index.html');
+const OVERLAY_ENTRY_HTML = join(rendererDir, 'apps', 'desktop', 'overlay.html');
 
 export class RendererUrlManager {
   private readonly rendererProtocolManager: RendererProtocolManager;
@@ -66,7 +67,8 @@ export class RendererUrlManager {
 
   /**
    * Resolve renderer file path in production.
-   * Static assets map directly; all routes fall back to index.html (SPA).
+   * Static assets map directly; /overlay routes fall back to overlay.html;
+   * all other routes fall back to index.html (SPA).
    */
   resolveRendererFilePath = async (url: URL): Promise<string | null> => {
     const pathname = url.pathname;
@@ -77,7 +79,12 @@ export class RendererUrlManager {
       return pathExistsSync(filePath) ? filePath : null;
     }
 
-    // All routes fallback to index.html (SPA)
+    // Overlay entry (separate MPA page)
+    if (pathname === '/overlay' || pathname === '/overlay.html') {
+      return OVERLAY_ENTRY_HTML;
+    }
+
+    // All other routes fallback to index.html (SPA)
     return SPA_ENTRY_HTML;
   };
 

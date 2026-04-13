@@ -24,6 +24,8 @@ function electronDesktopHtmlPlugin(): PluginOption {
       server.middlewares.use((req, _res, next) => {
         if (req.url === '/' || req.url === '/index.html') {
           req.url = '/apps/desktop/index.html';
+        } else if (req.url === '/overlay' || req.url === '/overlay.html') {
+          req.url = '/apps/desktop/overlay.html';
         }
         next();
       });
@@ -102,7 +104,10 @@ export default defineConfig({
     build: {
       outDir: path.resolve(__dirname, 'dist/renderer'),
       rollupOptions: {
-        input: path.resolve(__dirname, 'index.html'),
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          overlay: path.resolve(__dirname, 'overlay.html'),
+        },
         output: sharedRollupOutput,
       },
     },

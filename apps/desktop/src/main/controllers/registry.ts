@@ -13,6 +13,7 @@ import NetworkProxyCtr from './NetworkProxyCtr';
 import NotificationCtr from './NotificationCtr';
 import RemoteServerConfigCtr from './RemoteServerConfigCtr';
 import RemoteServerSyncCtr from './RemoteServerSyncCtr';
+import ScreenCaptureCtr from './ScreenCaptureCtr';
 import ShellCommandCtr from './ShellCommandCtr';
 import ShortcutController from './ShortcutCtr';
 import SystemController from './SystemCtr';
@@ -35,6 +36,7 @@ export const controllerIpcConstructors = [
   NotificationCtr,
   RemoteServerConfigCtr,
   RemoteServerSyncCtr,
+  ScreenCaptureCtr,
   ShellCommandCtr,
   ShortcutController,
   SystemController,

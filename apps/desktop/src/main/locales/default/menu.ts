@@ -70,6 +70,7 @@ const menu = {
   'macOS.preferences': 'Preferences...',
   'macOS.services': 'Services',
   'macOS.unhide': 'Show All',
+  'tray.captureScreen': 'Capture Screen',
   'tray.open': 'Open {{appName}}',
   'tray.quit': 'Quit',
   'tray.show': 'Show {{appName}}',

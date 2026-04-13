@@ -42,7 +42,9 @@
     "update-server": "sh scripts/update-test/run-test.sh"
   },
   "dependencies": {
-    "@napi-rs/canvas": "^0.1.70"
+    "@napi-rs/canvas": "^0.1.70",
+    "get-windows": "^9.3.0",
+    "node-screenshots": "^0.2.8"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",

@@ -2,6 +2,7 @@ import type { GatewayConnectionBroadcastEvents } from './gatewayConnection';
 import type { NavigationBroadcastEvents } from './navigation';
 import type { ProtocolBroadcastEvents } from './protocol';
 import type { RemoteServerBroadcastEvents } from './remoteServer';
+import type { ScreenCaptureBroadcastEvents } from './screenCapture';
 import type { SystemBroadcastEvents } from './system';
 import type { AutoUpdateBroadcastEvents } from './update';
 
@@ -15,6 +16,7 @@ export interface MainBroadcastEvents
     GatewayConnectionBroadcastEvents,
     NavigationBroadcastEvents,
     RemoteServerBroadcastEvents,
+    ScreenCaptureBroadcastEvents,
     SystemBroadcastEvents,
     ProtocolBroadcastEvents {}
 

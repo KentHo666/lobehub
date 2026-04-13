@@ -433,6 +433,10 @@ export class LinuxMenu extends BaseMenuPlatform implements IMenuPlatform {
         click: () => this.app.browserManager.showMainWindow(),
         label: t('tray.open', { appName }),
       },
+      {
+        click: () => this.app.screenCaptureManager.startSession(),
+        label: t('tray.captureScreen'),
+      },
       { type: 'separator' },
       {
         click: () => this.app.browserManager.retrieveByIdentifier('settings').show(),
