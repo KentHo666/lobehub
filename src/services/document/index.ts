@@ -14,6 +14,76 @@ import type {
 
 import { abortableRequest } from '../utils/abortableRequest';
 
+const serializeSavedAt = (savedAt: Date | string) =>
+  savedAt instanceof Date ? savedAt.toISOString() : savedAt;
+
+type SerializedSavedAt<T extends { savedAt: Date | string }> = Omit<T, 'savedAt'> & {
+  savedAt: string;
+};
+
+const serializeHistoryTimestamp = <T extends { savedAt: Date | string }>(
+  result: T,
+): SerializedSavedAt<T> => ({
+  ...result,
+  savedAt: serializeSavedAt(result.savedAt),
+});
+
+const serializeHistoryList = <
+  T extends {
+    headVersion: number;
+    items: Array<{
+      isCurrent: boolean;
+      saveSource: ListHistoryOutput['items'][number]['saveSource'];
+      savedAt: Date | string;
+      storageKind: ListHistoryOutput['items'][number]['storageKind'];
+      version: number;
+    }>;
+    nextBeforeVersion?: number;
+  },
+>(
+  result: T,
+): ListHistoryOutput => ({
+  ...result,
+  items: result.items.map((item) => ({
+    ...item,
+    savedAt: serializeSavedAt(item.savedAt),
+  })),
+});
+
+const serializeHistoryVersion = <
+  T extends {
+    editorData: GetHistoryVersionOutput['editorData'];
+    isCurrent: boolean;
+    saveSource: GetHistoryVersionOutput['saveSource'];
+    savedAt: Date | string;
+    version: number;
+  },
+>(
+  result: T,
+): GetHistoryVersionOutput => serializeHistoryTimestamp(result);
+
+const serializeHistoryComparison = <
+  T extends {
+    from: {
+      editorData: CompareHistoryVersionsOutput['from']['editorData'];
+      isCurrent: boolean;
+      savedAt: Date | string;
+      version: number;
+    };
+    to: {
+      editorData: CompareHistoryVersionsOutput['to']['editorData'];
+      isCurrent: boolean;
+      savedAt: Date | string;
+      version: number;
+    };
+  },
+>(
+  result: T,
+): CompareHistoryVersionsOutput => ({
+  from: serializeHistoryTimestamp(result.from),
+  to: serializeHistoryTimestamp(result.to),
+});
+
 export interface CreateDocumentParams {
   content?: string;
   editorData: string;
@@ -64,7 +134,9 @@ export class DocumentService {
   }
 
   async listDocumentHistory(params: ListDocumentHistoryParams): Promise<ListHistoryOutput> {
-    return lambdaClient.document.listDocumentHistory.query(params);
+    const result = await lambdaClient.document.listDocumentHistory.query(params);
+
+    return serializeHistoryList(result);
   }
 
   async getDocumentHistoryVersion(
@@ -72,18 +144,26 @@ export class DocumentService {
     uniqueKey?: string,
   ): Promise<GetHistoryVersionOutput> {
     if (uniqueKey) {
-      return abortableRequest.execute(uniqueKey, async (signal) =>
-        lambdaClient.document.getDocumentHistoryVersion.query(params, { signal }),
-      );
+      return abortableRequest.execute(uniqueKey, async (signal) => {
+        const result = await lambdaClient.document.getDocumentHistoryVersion.query(params, {
+          signal,
+        });
+
+        return serializeHistoryVersion(result);
+      });
     }
 
-    return lambdaClient.document.getDocumentHistoryVersion.query(params);
+    const result = await lambdaClient.document.getDocumentHistoryVersion.query(params);
+
+    return serializeHistoryVersion(result);
   }
 
   async compareDocumentHistoryVersions(
     params: CompareDocumentHistoryVersionsParams,
   ): Promise<CompareHistoryVersionsOutput> {
-    return lambdaClient.document.compareDocumentHistoryVersions.query(params);
+    const result = await lambdaClient.document.compareDocumentHistoryVersions.query(params);
+
+    return serializeHistoryComparison(result);
   }
 
   async getDocumentById(id: string, uniqueKey?: string): Promise<DocumentItem | undefined> {

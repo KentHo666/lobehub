@@ -15,6 +15,7 @@ import { DocumentHistoryService } from './history';
 import type {
   CompareDocumentHistoryVersionsParams,
   CompareDocumentHistoryVersionsResult,
+  DocumentHistoryAccessOptions,
   GetDocumentHistoryVersionParams,
   ListDocumentHistoryParams,
   ListDocumentHistoryResult,
@@ -166,18 +167,25 @@ export class DocumentService {
     return this.documentModel.findById(id);
   }
 
-  async listDocumentHistory(params: ListDocumentHistoryParams): Promise<ListDocumentHistoryResult> {
-    return this.documentHistoryService.listDocumentHistory(params);
+  async listDocumentHistory(
+    params: ListDocumentHistoryParams,
+    options?: DocumentHistoryAccessOptions,
+  ): Promise<ListDocumentHistoryResult> {
+    return this.documentHistoryService.listDocumentHistory(params, options);
   }
 
-  async getDocumentHistoryVersion(params: GetDocumentHistoryVersionParams) {
-    return this.documentHistoryService.getDocumentHistoryVersion(params);
+  async getDocumentHistoryVersion(
+    params: GetDocumentHistoryVersionParams,
+    options?: DocumentHistoryAccessOptions,
+  ) {
+    return this.documentHistoryService.getDocumentHistoryVersion(params, options);
   }
 
   async compareDocumentHistoryVersions(
     params: CompareDocumentHistoryVersionsParams,
+    options?: DocumentHistoryAccessOptions,
   ): Promise<CompareDocumentHistoryVersionsResult> {
-    return this.documentHistoryService.compareDocumentHistoryVersions(params);
+    return this.documentHistoryService.compareDocumentHistoryVersions(params, options);
   }
 
   /**
@@ -301,9 +309,7 @@ export class DocumentService {
         await fileModel.update(currentDocument.fileId, fileUpdates);
       }
 
-      if (historyAppended) {
-        await documentHistoryService.compactHistory(id);
-      }
+      if (historyAppended) await documentHistoryService.compactHistory(id);
 
       return {
         historyAppended,

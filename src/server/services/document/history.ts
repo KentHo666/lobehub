@@ -1,6 +1,6 @@
 import type { DocumentItem } from '@lobechat/database/schemas';
 import { documentHistories, documents } from '@lobechat/database/schemas';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, notInArray } from 'drizzle-orm';
 
 import type { LobeChatDatabase, Transaction } from '@/database/type';
 
@@ -8,6 +8,7 @@ import { applyJsonPatch, createJsonPatch, isOversizedJsonPatch } from './diff/js
 import type {
   CompareDocumentHistoryVersionsParams,
   CompareDocumentHistoryVersionsResult,
+  DocumentHistoryAccessOptions,
   DocumentHistoryListItem,
   DocumentHistorySaveSource,
   DocumentHistoryStorageKind,
@@ -140,20 +141,74 @@ export class DocumentHistoryService {
 
   compareDocumentHistoryVersions = async (
     params: CompareDocumentHistoryVersionsParams,
+    options?: DocumentHistoryAccessOptions,
   ): Promise<CompareDocumentHistoryVersionsResult> => {
     const [from, to] = await Promise.all([
-      this.getDocumentHistoryVersion({
-        documentId: params.documentId,
-        version: params.fromVersion,
-      }),
-      this.getDocumentHistoryVersion({ documentId: params.documentId, version: params.toVersion }),
+      this.getDocumentHistoryVersion(
+        {
+          documentId: params.documentId,
+          version: params.fromVersion,
+        },
+        options,
+      ),
+      this.getDocumentHistoryVersion(
+        { documentId: params.documentId, version: params.toVersion },
+        options,
+      ),
     ]);
 
     return { from, to };
   };
 
   compactHistory = async (documentId: string, limit = DOCUMENT_HISTORY_LIMIT) => {
-    await this.rewriteHistory(documentId, { limit });
+    const retainedRows = await this.db.query.documentHistories.findMany({
+      columns: {
+        baseVersion: true,
+        storageKind: true,
+        version: true,
+      },
+      limit,
+      orderBy: [desc(documentHistories.version)],
+      where: and(
+        eq(documentHistories.documentId, documentId),
+        eq(documentHistories.userId, this.userId),
+      ),
+    });
+
+    if (retainedRows.length < limit) return;
+
+    const retainedVersions = new Set(retainedRows.map((row) => row.version));
+    const pinnedBaseVersions = Array.from(
+      new Set(
+        retainedRows.flatMap((row) => {
+          if (
+            row.storageKind !== 'patch' ||
+            row.baseVersion === null ||
+            retainedVersions.has(row.baseVersion)
+          ) {
+            return [];
+          }
+
+          return [row.baseVersion];
+        }),
+      ),
+    );
+    const oldestRetainedVersion = retainedRows.at(-1)?.version;
+
+    if (!oldestRetainedVersion) return;
+
+    await this.db
+      .delete(documentHistories)
+      .where(
+        and(
+          eq(documentHistories.documentId, documentId),
+          eq(documentHistories.userId, this.userId),
+          lt(documentHistories.version, oldestRetainedVersion),
+          pinnedBaseVersions.length > 0
+            ? notInArray(documentHistories.version, pinnedBaseVersions)
+            : undefined,
+        ),
+      );
   };
 
   rebuildHistory = async (
@@ -166,6 +221,7 @@ export class DocumentHistoryService {
 
   getDocumentHistoryVersion = async (
     params: GetDocumentHistoryVersionParams,
+    options?: DocumentHistoryAccessOptions,
   ): Promise<DocumentHistoryVersionResult> => {
     const headDocument = await this.findHeadDocument(params.documentId);
     const headVersion = getDocumentVersion(headDocument);
@@ -189,6 +245,7 @@ export class DocumentHistoryService {
         eq(documentHistories.documentId, params.documentId),
         eq(documentHistories.userId, this.userId),
         eq(documentHistories.version, params.version),
+        options?.historySince ? gte(documentHistories.savedAt, options.historySince) : undefined,
       ),
     });
 
@@ -207,6 +264,7 @@ export class DocumentHistoryService {
 
   listDocumentHistory = async (
     params: ListDocumentHistoryParams,
+    options?: DocumentHistoryAccessOptions,
   ): Promise<ListDocumentHistoryResult> => {
     const limit = Math.min(params.limit ?? DOCUMENT_HISTORY_LIST_LIMIT, DOCUMENT_HISTORY_LIMIT);
     const headDocument = await this.findHeadDocument(params.documentId);
@@ -242,6 +300,7 @@ export class DocumentHistoryService {
       where: and(
         eq(documentHistories.documentId, params.documentId),
         eq(documentHistories.userId, this.userId),
+        options?.historySince ? gte(documentHistories.savedAt, options.historySince) : undefined,
         params.beforeVersion !== undefined
           ? lt(documentHistories.version, params.beforeVersion)
           : undefined,

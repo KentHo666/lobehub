@@ -335,9 +335,12 @@ describe('DocumentService', () => {
 
       const result = await service.listDocumentHistory({ documentId: 'doc-1' });
 
-      expect(mockDocumentHistoryService.listDocumentHistory).toHaveBeenCalledWith({
-        documentId: 'doc-1',
-      });
+      expect(mockDocumentHistoryService.listDocumentHistory).toHaveBeenCalledWith(
+        {
+          documentId: 'doc-1',
+        },
+        undefined,
+      );
       expect(result).toEqual(mockResult);
     });
 
@@ -347,10 +350,13 @@ describe('DocumentService', () => {
 
       const result = await service.getDocumentHistoryVersion({ documentId: 'doc-1', version: 2 });
 
-      expect(mockDocumentHistoryService.getDocumentHistoryVersion).toHaveBeenCalledWith({
-        documentId: 'doc-1',
-        version: 2,
-      });
+      expect(mockDocumentHistoryService.getDocumentHistoryVersion).toHaveBeenCalledWith(
+        {
+          documentId: 'doc-1',
+          version: 2,
+        },
+        undefined,
+      );
       expect(result).toEqual(mockResult);
     });
 
@@ -367,11 +373,14 @@ describe('DocumentService', () => {
         toVersion: 2,
       });
 
-      expect(mockDocumentHistoryService.compareDocumentHistoryVersions).toHaveBeenCalledWith({
-        documentId: 'doc-1',
-        fromVersion: 1,
-        toVersion: 2,
-      });
+      expect(mockDocumentHistoryService.compareDocumentHistoryVersions).toHaveBeenCalledWith(
+        {
+          documentId: 'doc-1',
+          fromVersion: 1,
+          toVersion: 2,
+        },
+        undefined,
+      );
       expect(result).toEqual(mockResult);
     });
   });

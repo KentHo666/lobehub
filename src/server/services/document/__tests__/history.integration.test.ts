@@ -2,7 +2,7 @@
 import { type LobeChatDatabase } from '@lobechat/database';
 import { documentHistories, documents, users } from '@lobechat/database/schemas';
 import { getTestDB } from '@lobechat/database/test-utils';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DocumentHistoryService } from '../history';
@@ -148,7 +148,7 @@ describe('Document history integration', () => {
     expect(comparison.to.isCurrent).toBe(true);
   });
 
-  it('should keep retained versions recoverable after history compaction', async () => {
+  it('should trim obsolete snapshot-only history rows during compaction', async () => {
     const documentService = new DocumentService(serverDB, userId);
     const historyService = new DocumentHistoryService(serverDB, userId);
     const version1 = createEditorData('v1');
@@ -198,6 +198,141 @@ describe('Document history integration', () => {
 
     expect(resolvedVersion2.editorData).toEqual(version2);
     expect(resolvedVersion3.editorData).toEqual(version3);
+  });
+
+  it('should preserve an external base snapshot needed by retained patch rows during compaction', async () => {
+    const documentService = new DocumentService(serverDB, userId);
+    const historyService = new DocumentHistoryService(serverDB, userId);
+    const initialNodes = [
+      createLexicalParagraphNode('empty-1'),
+      createLexicalParagraphNode('empty-2'),
+      createLexicalParagraphNode('empty-3'),
+      createLexicalParagraphNode('body-1', 'alpha'),
+      createLexicalParagraphNode('body-2', 'beta'),
+      createLexicalParagraphNode('body-3', 'gamma'),
+      createLexicalParagraphNode('body-4', 'delta'),
+      createLexicalParagraphNode('body-5', 'epsilon'),
+    ];
+    const version1 = createLexicalEditorData(initialNodes);
+    const version2 = createLexicalEditorData(initialNodes.filter((node) => node.id !== 'empty-1'));
+    const version3 = createLexicalEditorData(
+      initialNodes.filter((node) => node.id !== 'empty-1' && node.id !== 'empty-2'),
+    );
+    const version4 = createLexicalEditorData(
+      initialNodes.filter((node) => !['empty-1', 'empty-2', 'empty-3'].includes(String(node.id))),
+    );
+
+    const document = await documentService.createDocument({
+      content: 'Patch compaction doc',
+      editorData: version1,
+      title: 'Patch compaction doc',
+    });
+
+    await documentService.updateDocument(document.id, { editorData: version2 });
+    await documentService.updateDocument(document.id, { editorData: version3 });
+    await documentService.updateDocument(document.id, { editorData: version4 });
+
+    await historyService.compactHistory(document.id, 2);
+
+    const retainedRows = await serverDB.query.documentHistories.findMany({
+      orderBy: [asc(documentHistories.version)],
+      where: eq(documentHistories.documentId, document.id),
+    });
+
+    expect(retainedRows.map((row) => row.version)).toEqual([1, 2, 3]);
+    expect(retainedRows.map((row) => row.storageKind)).toEqual(['snapshot', 'patch', 'patch']);
+
+    const resolvedVersion2 = await historyService.getDocumentHistoryVersion({
+      documentId: document.id,
+      version: 2,
+    });
+    const resolvedVersion3 = await historyService.getDocumentHistoryVersion({
+      documentId: document.id,
+      version: 3,
+    });
+
+    expect(resolvedVersion2.editorData).toEqual(version2);
+    expect(resolvedVersion3.editorData).toEqual(version3);
+  });
+
+  it('should limit front-end history queries to versions saved within the last 30 days', async () => {
+    const documentService = new DocumentService(serverDB, userId);
+    const now = Date.now();
+    const historySince = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    const oldSavedAt = new Date(now - 40 * 24 * 60 * 60 * 1000);
+    const recentSavedAt = new Date(now - 5 * 24 * 60 * 60 * 1000);
+
+    const version1 = createEditorData('v1');
+    const version2 = createEditorData('v2');
+    const version3 = createEditorData('v3');
+
+    const document = await documentService.createDocument({
+      content: 'v1',
+      editorData: version1,
+      title: 'History access window doc',
+    });
+
+    await documentService.updateDocument(document.id, {
+      editorData: version2,
+      saveSource: 'manual',
+    });
+    await documentService.updateDocument(document.id, {
+      editorData: version3,
+      saveSource: 'manual',
+    });
+
+    await serverDB
+      .update(documentHistories)
+      .set({ savedAt: oldSavedAt })
+      .where(
+        and(
+          eq(documentHistories.documentId, document.id),
+          eq(documentHistories.version, 1),
+          eq(documentHistories.userId, userId),
+        ),
+      );
+
+    await serverDB
+      .update(documentHistories)
+      .set({ savedAt: recentSavedAt })
+      .where(
+        and(
+          eq(documentHistories.documentId, document.id),
+          eq(documentHistories.version, 2),
+          eq(documentHistories.userId, userId),
+        ),
+      );
+
+    const historyList = await documentService.listDocumentHistory(
+      {
+        documentId: document.id,
+        includeCurrent: true,
+      },
+      { historySince },
+    );
+
+    expect(historyList.items.map((item) => item.version)).toEqual([3, 2]);
+
+    await expect(
+      documentService.getDocumentHistoryVersion(
+        {
+          documentId: document.id,
+          version: 1,
+        },
+        { historySince },
+      ),
+    ).rejects.toThrow(`Document history version not found: ${document.id}@1`);
+
+    const currentVersion = await documentService.getDocumentHistoryVersion(
+      {
+        documentId: document.id,
+        version: 3,
+      },
+      { historySince },
+    );
+
+    expect(currentVersion.isCurrent).toBe(true);
+    expect(currentVersion.editorData).toEqual(version3);
   });
 
   it('should store patches for keyed editor node deletions instead of snapshots', async () => {

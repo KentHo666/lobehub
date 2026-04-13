@@ -5,7 +5,7 @@ import type { ModalInstance } from '@lobehub/ui/base-ui';
 import { App, Tooltip } from 'antd';
 import { createStaticStyles, cssVar, cx } from 'antd-style';
 import dayjs from 'dayjs';
-import { ArrowLeftIcon, Clock3Icon, GitCompareArrowsIcon, RotateCcwIcon } from 'lucide-react';
+import { ArrowLeftIcon, Clock3Icon, RotateCcwIcon } from 'lucide-react';
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -53,8 +53,8 @@ const styles = createStaticStyles(({ css }) => ({
     z-index: 1;
     inset-block-start: 0;
 
-    padding-block: 6px 3px;
-    padding-inline-start: ${TIMELINE_CONTENT_OFFSET}px;
+    padding-block: 16px 3px;
+    padding-inline-start: ${TIMELINE_CONTENT_OFFSET + 8}px;
 
     background: ${cssVar.colorBgContainer};
   `,
@@ -90,8 +90,8 @@ const styles = createStaticStyles(({ css }) => ({
   meta: css`
     overflow: hidden;
 
-    font-size: 11px;
-    line-height: 1;
+    font-size: 12px;
+    line-height: 1.4;
     text-overflow: ellipsis;
     white-space: nowrap;
   `,
@@ -115,14 +115,17 @@ const styles = createStaticStyles(({ css }) => ({
     transition: background ${cssVar.motionDurationMid} ${cssVar.motionEaseInOut};
 
     &:hover {
-      background: ${cssVar.colorFillQuaternary};
+      background: ${cssVar.colorFillSecondary};
     }
   `,
+  rowBodyClickable: css`
+    cursor: pointer;
+  `,
   rowCurrent: css`
-    background: ${cssVar.colorFillQuaternary};
+    background: ${cssVar.colorFillTertiary};
 
     &:hover {
-      background: ${cssVar.colorFillTertiary};
+      background: ${cssVar.colorFillSecondary};
     }
   `,
   rowDot: css`
@@ -152,7 +155,7 @@ const styles = createStaticStyles(({ css }) => ({
 
     font-size: 12px;
     font-weight: 600;
-    line-height: 1;
+    line-height: 1.4;
     white-space: nowrap;
   `,
   versionActions: css`
@@ -213,6 +216,7 @@ const HistoryPanel = memo(() => {
         includeCurrent: true,
         limit: 50,
       }),
+    { keepPreviousData: true },
   );
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
@@ -362,9 +366,14 @@ const HistoryPanel = memo(() => {
                     <Flexbox
                       horizontal
                       align={'center'}
-                      className={cx(styles.rowBody, item.isCurrent && styles.rowCurrent)}
                       distribution={'space-between'}
                       gap={8}
+                      className={cx(
+                        styles.rowBody,
+                        item.isCurrent && styles.rowCurrent,
+                        !item.isCurrent && styles.rowBodyClickable,
+                      )}
+                      onClick={item.isCurrent ? undefined : () => openCompareModal(item.version)}
                     >
                       <Flexbox
                         horizontal
@@ -395,13 +404,8 @@ const HistoryPanel = memo(() => {
                           align={'center'}
                           className={`history-actions ${styles.versionActions}`}
                           gap={6}
+                          onClick={(event) => event.stopPropagation()}
                         >
-                          <ActionIcon
-                            icon={GitCompareArrowsIcon}
-                            size={{ blockSize: 26, borderRadius: '50%', size: 14 }}
-                            title={t('pageEditor.history.compare', { ns: 'file' })}
-                            onClick={() => openCompareModal(item.version)}
-                          />
                           <ActionIcon
                             icon={RotateCcwIcon}
                             loading={isRestoring}

@@ -58,7 +58,7 @@ const findArrayMatches = (base: unknown[], current: unknown[]): JsonArrayMatch[]
   const baseKeys = base.map(createSemanticKey);
   const currentKeys = current.map(createSemanticKey);
   const lcs = Array.from({ length: base.length + 1 }, () =>
-    Array.from({ length: current.length + 1 }).fill(0),
+    Array.from({ length: current.length + 1 }, () => 0),
   );
 
   for (let baseIndex = base.length - 1; baseIndex >= 0; baseIndex -= 1) {

@@ -10,11 +10,18 @@ import { DocumentService } from '@/server/services/document';
 
 import {
   compareDocumentHistoryVersionsInputSchema,
-  type DocumentHistoryRouterService,
   getDocumentHistoryVersionInputSchema,
   listDocumentHistoryInputSchema,
   updateDocumentInputSchema,
 } from './_schema/documentHistory';
+
+const FREE_DOCUMENT_HISTORY_WINDOW_DAYS = 30;
+
+const getFreeDocumentHistorySince = () => {
+  const now = Date.now();
+
+  return new Date(now - FREE_DOCUMENT_HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+};
 
 const documentProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -128,25 +135,25 @@ export const documentRouter = router({
   listDocumentHistory: documentProcedure
     .input(listDocumentHistoryInputSchema)
     .query(async ({ ctx, input }) => {
-      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
-
-      return historyService.listDocumentHistory(input);
+      return ctx.documentService.listDocumentHistory(input, {
+        historySince: getFreeDocumentHistorySince(),
+      });
     }),
 
   getDocumentHistoryVersion: documentProcedure
     .input(getDocumentHistoryVersionInputSchema)
     .query(async ({ ctx, input }) => {
-      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
-
-      return historyService.getDocumentHistoryVersion(input);
+      return ctx.documentService.getDocumentHistoryVersion(input, {
+        historySince: getFreeDocumentHistorySince(),
+      });
     }),
 
   compareDocumentHistoryVersions: documentProcedure
     .input(compareDocumentHistoryVersionsInputSchema)
     .query(async ({ ctx, input }) => {
-      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
-
-      return historyService.compareDocumentHistoryVersions(input);
+      return ctx.documentService.compareDocumentHistoryVersions(input, {
+        historySince: getFreeDocumentHistorySince(),
+      });
     }),
 
   getFolderBreadcrumb: documentProcedure
@@ -220,9 +227,8 @@ export const documentRouter = router({
       const { id, editorData: editorDataString, ...params } = input;
       // Parse editorData from JSON string to object if present
       const editorData = editorDataString ? JSON.parse(editorDataString) : undefined;
-      const historyService = ctx.documentService as unknown as DocumentHistoryRouterService;
 
-      return historyService.updateDocument(id, {
+      return ctx.documentService.updateDocument(id, {
         ...params,
         editorData,
       });

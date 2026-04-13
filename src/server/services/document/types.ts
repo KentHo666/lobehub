@@ -13,6 +13,10 @@ export interface CompareDocumentHistoryVersionsResult {
   to: DocumentHistoryVersionResult;
 }
 
+export interface DocumentHistoryAccessOptions {
+  historySince?: Date;
+}
+
 export interface DocumentHistoryListItem {
   isCurrent: boolean;
   savedAt: Date;
