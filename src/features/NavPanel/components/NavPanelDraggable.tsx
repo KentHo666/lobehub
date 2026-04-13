@@ -14,39 +14,25 @@ import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors';
 import { useUserStore } from '@/store/user';
 import { userGeneralSettingsSelectors } from '@/store/user/selectors';
+import type { PanelSlideMotionDirection } from '@/utils/motion/panelSlideMotion';
+import {
+  isPanelLayerMotionDisabled,
+  panelSlideMotionVariantsLeft,
+} from '@/utils/motion/panelSlideMotion';
 import { isMacOS } from '@/utils/platform';
 
 import { useNavPanelSizeChangeHandler } from '../hooks/useNavPanel';
 import { BACK_BUTTON_ID } from './BackButton';
 
-type MotionDirection = -1 | 0 | 1;
-
-const MOTION_OFFSET = 8;
-
-const isMotionDisabled = (mode?: string) => mode === 'disabled';
-
-const getMotionDirectionByHistory = (history: string[], nextKey: string): MotionDirection => {
+const getMotionDirectionByHistory = (
+  history: string[],
+  nextKey: string,
+): PanelSlideMotionDirection => {
   const currentKey = history.at(-1);
   if (currentKey === nextKey) return 0;
 
   return history.includes(nextKey) ? -1 : 1;
 };
-
-const motionVariants = {
-  animate: { opacity: 1, x: 0 },
-  exit: (direction: MotionDirection) => ({
-    opacity: 0,
-    x: -direction * MOTION_OFFSET,
-  }),
-  initial: (direction: MotionDirection) => ({
-    opacity: 0,
-    x: direction * MOTION_OFFSET,
-  }),
-  transition: {
-    duration: 0.28,
-    ease: [0.4, 0, 0.2, 1],
-  },
-} as const;
 
 const draggableStyles = createStaticStyles(({ css, cssVar }) => ({
   content: css`
@@ -157,7 +143,7 @@ export const NavPanelDraggable = memo<NavPanelDraggableProps>(({ activeContent }
     s.toggleLeftPanel,
   ]);
   const animationMode = useUserStore(userGeneralSettingsSelectors.animationMode);
-  const shouldUseMotion = !isMotionDisabled(animationMode);
+  const shouldUseMotion = !isPanelLayerMotionDisabled(animationMode);
   const handleSizeChange = useNavPanelSizeChangeHandler();
 
   const defaultWidthRef = useRef(0);
@@ -181,7 +167,7 @@ export const NavPanelDraggable = memo<NavPanelDraggableProps>(({ activeContent }
   );
 
   const historyRef = useRef([activeContent.key]);
-  const directionRef = useRef<MotionDirection>(0);
+  const directionRef = useRef<PanelSlideMotionDirection>(0);
 
   const history = historyRef.current;
   const direction = shouldUseMotion ? getMotionDirectionByHistory(history, activeContent.key) : 0;
@@ -234,8 +220,8 @@ export const NavPanelDraggable = memo<NavPanelDraggableProps>(({ activeContent }
               exit="exit"
               initial="initial"
               key={activeContent.key}
-              transition={motionVariants.transition}
-              variants={motionVariants}
+              transition={panelSlideMotionVariantsLeft.transition}
+              variants={panelSlideMotionVariantsLeft}
             >
               <ExitingFrozenContent>{activeContent.node}</ExitingFrozenContent>
             </m.div>

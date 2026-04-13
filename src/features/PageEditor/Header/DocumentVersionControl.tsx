@@ -21,11 +21,9 @@ const styles = createStaticStyles(({ css }) => ({
 
     min-width: 0;
     margin-inline-start: 6px;
-    border: 1px solid ${cssVar.colorBorderSecondary};
-    border-radius: 999px;
+    border-radius: 3px;
 
-    background: ${cssVar.colorFillQuaternary};
-    backdrop-filter: blur(8px);
+    background: ${cssVar.colorFillTertiary};
   `,
   historyButton: css`
     cursor: pointer;
@@ -33,9 +31,9 @@ const styles = createStaticStyles(({ css }) => ({
     display: flex;
     align-items: center;
 
-    padding: 0;
+    padding-block: 4px;
+    padding-inline: 6px 10px;
     border: 0;
-    border-inline-start: 1px solid ${cssVar.colorBorderSecondary};
 
     font: inherit;
     color: inherit;
@@ -53,10 +51,19 @@ const styles = createStaticStyles(({ css }) => ({
       box-shadow: inset 0 0 0 1px ${cssVar.colorPrimary};
     }
   `,
-  segment: css`
+  separator: css`
+    user-select: none;
+
+    flex-shrink: 0;
+
+    font-size: 12px;
+    line-height: 1;
+    color: ${cssVar.colorTextQuaternary};
+  `,
+  statusSection: css`
     min-width: 0;
-    padding-block: 6px;
-    padding-inline: 10px 12px;
+    padding-block: 4px;
+    padding-inline: 10px 6px;
   `,
   statusText: css`
     overflow: hidden;
@@ -102,12 +109,13 @@ const DocumentVersionControl = memo<DocumentVersionControlProps>(({ documentId }
 
   return (
     <div className={styles.container}>
-      <Flexbox className={styles.segment} gap={6} horizontal={true}>
-        <Icon icon={saveStatusIcon} size={14} spin={saveStatus === 'saving'} />
+      <Flexbox align={'center'} className={styles.statusSection} gap={5} horizontal={true}>
+        <Icon icon={saveStatusIcon} size={12} spin={saveStatus === 'saving'} />
         <Text className={styles.statusText} type={'secondary'}>
           {saveStatusLabel}
         </Text>
       </Flexbox>
+      <span className={styles.separator}>·</span>
       <button
         aria-label={t('pageEditor.history.title', { ns: 'file' })}
         className={styles.historyButton}
@@ -118,8 +126,8 @@ const DocumentVersionControl = memo<DocumentVersionControlProps>(({ documentId }
           toggleRightPanel(true);
         }}
       >
-        <Flexbox align={'center'} className={styles.segment} gap={6} horizontal={true}>
-          <Icon icon={Clock3Icon} size={14} />
+        <Flexbox align={'center'} gap={5} horizontal={true}>
+          <Icon icon={Clock3Icon} size={12} />
           <span className={styles.versionText}>
             {t('pageEditor.history.versionLabel', { ns: 'file', version: headVersion })}
           </span>

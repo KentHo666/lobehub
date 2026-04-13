@@ -1,12 +1,12 @@
 'use client';
 
 import { ActionIcon, Button, Empty, Flexbox, Tag, Text } from '@lobehub/ui';
-import { Modal } from '@lobehub/ui/base-ui';
-import { App } from 'antd';
+import type { ModalInstance } from '@lobehub/ui/base-ui';
+import { App, Tooltip } from 'antd';
 import { createStaticStyles, cssVar, cx } from 'antd-style';
 import dayjs from 'dayjs';
 import { ArrowLeftIcon, Clock3Icon, GitCompareArrowsIcon, RotateCcwIcon } from 'lucide-react';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import Loading from '@/components/Loading/BrandTextLoading';
@@ -23,7 +23,7 @@ import { useDocumentStore } from '@/store/document';
 import { editorSelectors } from '@/store/document/slices/editor';
 
 import { selectors, usePageEditorStore } from '../store';
-import DocumentHistoryDiff from './DocumentHistoryDiff';
+import { openDocumentCompareModal } from './CompareModal';
 
 interface HistoryDayGroup {
   items: DocumentHistoryListItem[];
@@ -33,10 +33,10 @@ interface HistoryDayGroup {
 
 const TIMELINE_DOT_SIZE = 10;
 const TIMELINE_LINE_INSET = 19;
-const TIMELINE_ROW_PADDING_TOP = 6;
+const TIMELINE_ROW_PADDING_TOP = 5;
 const TIMELINE_ROW_PADDING_INLINE = 8;
-const TIMELINE_ROW_PADDING_BOTTOM = 8;
-const TIMELINE_DOT_TOP = 14;
+const TIMELINE_ROW_PADDING_BOTTOM = 5;
+const TIMELINE_DOT_TOP = 11;
 const TIMELINE_CONTENT_OFFSET = TIMELINE_LINE_INSET + TIMELINE_DOT_SIZE / 2 + 10;
 
 const styles = createStaticStyles(({ css }) => ({
@@ -53,7 +53,7 @@ const styles = createStaticStyles(({ css }) => ({
     z-index: 1;
     inset-block-start: 0;
 
-    padding-block: 10px 6px;
+    padding-block: 6px 3px;
     padding-inline-start: ${TIMELINE_CONTENT_OFFSET}px;
 
     background: ${cssVar.colorBgContainer};
@@ -87,8 +87,13 @@ const styles = createStaticStyles(({ css }) => ({
 
     background: ${cssVar.colorFillSecondary};
   `,
-  metaLine: css`
-    flex-wrap: wrap;
+  meta: css`
+    overflow: hidden;
+
+    font-size: 11px;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   `,
   row: css`
     position: relative;
@@ -142,22 +147,13 @@ const styles = createStaticStyles(({ css }) => ({
       0 0 0 2px ${cssVar.colorPrimaryBorder},
       0 0 0 6px ${cssVar.colorBgContainer};
   `,
-  savedAt: css`
-    font-size: 12px;
-    line-height: 1.4;
-  `,
-  sourceTag: css`
-    min-width: fit-content;
-    margin-inline-start: 0;
-  `,
-  titleRow: css`
-    flex-wrap: wrap;
-    min-width: 0;
-  `,
   version: css`
-    font-size: 15px;
+    flex-shrink: 0;
+
+    font-size: 12px;
     font-weight: 600;
-    line-height: 1.4;
+    line-height: 1;
+    white-space: nowrap;
   `,
   versionActions: css`
     pointer-events: none;
@@ -206,8 +202,8 @@ const HistoryPanel = memo(() => {
   const markDirty = useDocumentStore((s) => s.markDirty);
   const performSave = useDocumentStore((s) => s.performSave);
 
-  const [compareVersion, setCompareVersion] = useState<number | null>(null);
   const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
+  const compareInstanceRef = useRef<ModalInstance | null>(null);
 
   const { data, isLoading } = useClientDataSWR<ListHistoryOutput>(
     documentId ? ['page-editor-document-history', documentId, headVersion] : null,
@@ -221,10 +217,6 @@ const HistoryPanel = memo(() => {
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
   const groups = useMemo(() => createHistoryDayGroups(items), [items]);
-  const compareItem = useMemo(
-    () => items.find((item) => item.version === compareVersion),
-    [compareVersion, items],
-  );
   const saveSourceLabels = useMemo<Record<DocumentHistorySaveSource, string>>(
     () => ({
       autosave: t('pageEditor.history.saveSource.autosave', { ns: 'file' }),
@@ -235,53 +227,68 @@ const HistoryPanel = memo(() => {
     [t],
   );
 
-  useEffect(() => {
-    setCompareVersion(null);
-  }, [documentId]);
+  const handleRestore = useCallback(
+    (item: DocumentHistoryListItem, onSuccess?: () => void) => {
+      if (!documentId || !editor || item.isCurrent) return;
+
+      modal.confirm({
+        cancelText: t('cancel', { ns: 'common' }),
+        content: t('pageEditor.history.restoreConfirm.content', {
+          ns: 'file',
+          savedAt: formatAbsoluteTime(item.savedAt),
+          version: item.version,
+        }),
+        okText: t('pageEditor.history.restore', { ns: 'file' }),
+        onOk: async () => {
+          setRestoringVersion(item.version);
+
+          try {
+            const result = await documentService.getDocumentHistoryVersion(
+              { documentId, version: item.version },
+              `page-editor-history-${documentId}`,
+            );
+
+            editor.setDocument('json', JSON.stringify(result.editorData));
+            markDirty(documentId);
+            await performSave(documentId, undefined, {
+              restoreFromVersion: item.version,
+              saveSource: 'restore',
+            });
+            onSuccess?.();
+          } catch (error) {
+            console.error('[PageEditor] Failed to restore version:', error);
+            message.error(t('pageEditor.history.restoreError', { ns: 'file' }));
+            throw error;
+          } finally {
+            setRestoringVersion(null);
+          }
+        },
+        title: t('pageEditor.history.restoreConfirm.title', {
+          ns: 'file',
+          version: item.version,
+        }),
+      });
+    },
+    [documentId, editor, markDirty, message, modal, performSave, t],
+  );
+
+  const openCompareModal = useCallback(
+    (initialVersion: number) => {
+      compareInstanceRef.current?.destroy();
+      const instance = openDocumentCompareModal({
+        documentId: documentId!,
+        headVersion,
+        initialVersion,
+        items,
+        onRestore: (item) => handleRestore(item, () => instance.close()),
+        saveSourceLabels,
+      });
+      compareInstanceRef.current = instance;
+    },
+    [documentId, handleRestore, headVersion, items, saveSourceLabels],
+  );
 
   if (!documentId) return null;
-
-  const handleRestore = (item: DocumentHistoryListItem) => {
-    if (!documentId || !editor || item.isCurrent) return;
-
-    modal.confirm({
-      cancelText: t('cancel', { ns: 'common' }),
-      content: t('pageEditor.history.restoreConfirm.content', {
-        ns: 'file',
-        savedAt: formatAbsoluteTime(item.savedAt),
-        version: item.version,
-      }),
-      okText: t('pageEditor.history.restore', { ns: 'file' }),
-      onOk: async () => {
-        setRestoringVersion(item.version);
-
-        try {
-          const result = await documentService.getDocumentHistoryVersion(
-            { documentId, version: item.version },
-            `page-editor-history-${documentId}`,
-          );
-
-          editor.setDocument('json', JSON.stringify(result.editorData));
-          markDirty(documentId);
-          await performSave(documentId, undefined, {
-            restoreFromVersion: item.version,
-            saveSource: 'restore',
-          });
-          setCompareVersion(null);
-        } catch (error) {
-          console.error('[PageEditor] Failed to restore version:', error);
-          message.error(t('pageEditor.history.restoreError', { ns: 'file' }));
-          throw error;
-        } finally {
-          setRestoringVersion(null);
-        }
-      },
-      title: t('pageEditor.history.restoreConfirm.title', {
-        ns: 'file',
-        version: item.version,
-      }),
-    });
-  };
 
   return (
     <Flexbox flex={1} height={'100%'}>
@@ -353,73 +360,57 @@ const HistoryPanel = memo(() => {
                       )}
                     />
                     <Flexbox
+                      horizontal
+                      align={'center'}
                       className={cx(styles.rowBody, item.isCurrent && styles.rowCurrent)}
+                      distribution={'space-between'}
                       gap={8}
                     >
-                      <Flexbox gap={6} style={{ minWidth: 0 }}>
+                      <Flexbox
+                        horizontal
+                        align={'center'}
+                        gap={6}
+                        style={{ minWidth: 0, overflow: 'hidden' }}
+                      >
+                        <Text className={styles.version}>
+                          {t('pageEditor.history.itemVersionLabel', {
+                            ns: 'file',
+                            version: item.version,
+                          })}
+                        </Text>
+                        {item.isCurrent && (
+                          <Tag variant={'borderless'}>
+                            {t('pageEditor.history.current', { ns: 'file' })}
+                          </Tag>
+                        )}
+                        <Tooltip title={formatAbsoluteTime(item.savedAt)}>
+                          <Text className={styles.meta} type={'secondary'}>
+                            {dayjs(item.savedAt).fromNow()} · {saveSourceLabels[item.saveSource]}
+                          </Text>
+                        </Tooltip>
+                      </Flexbox>
+                      {!item.isCurrent && (
                         <Flexbox
                           horizontal
-                          align={'flex-start'}
-                          distribution={'space-between'}
-                          gap={8}
+                          align={'center'}
+                          className={`history-actions ${styles.versionActions}`}
+                          gap={6}
                         >
-                          <Flexbox
-                            horizontal
-                            align={'center'}
-                            className={styles.titleRow}
-                            gap={8}
-                            wrap={'wrap'}
-                          >
-                            <Text className={styles.version}>
-                              {t('pageEditor.history.itemVersionLabel', {
-                                ns: 'file',
-                                version: item.version,
-                              })}
-                            </Text>
-                            {item.isCurrent && (
-                              <Tag variant={'borderless'}>
-                                {t('pageEditor.history.current', { ns: 'file' })}
-                              </Tag>
-                            )}
-                          </Flexbox>
-
-                          {!item.isCurrent && (
-                            <Flexbox
-                              horizontal
-                              align={'center'}
-                              className={`history-actions ${styles.versionActions}`}
-                              gap={6}
-                            >
-                              <ActionIcon
-                                icon={GitCompareArrowsIcon}
-                                size={{ blockSize: 26, borderRadius: '50%', size: 14 }}
-                                title={t('pageEditor.history.compare', { ns: 'file' })}
-                                onClick={() => setCompareVersion(item.version)}
-                              />
-                              <ActionIcon
-                                icon={RotateCcwIcon}
-                                loading={isRestoring}
-                                size={{ blockSize: 26, borderRadius: '50%', size: 14 }}
-                                title={t('pageEditor.history.restore', { ns: 'file' })}
-                                onClick={() => handleRestore(item)}
-                              />
-                            </Flexbox>
-                          )}
+                          <ActionIcon
+                            icon={GitCompareArrowsIcon}
+                            size={{ blockSize: 26, borderRadius: '50%', size: 14 }}
+                            title={t('pageEditor.history.compare', { ns: 'file' })}
+                            onClick={() => openCompareModal(item.version)}
+                          />
+                          <ActionIcon
+                            icon={RotateCcwIcon}
+                            loading={isRestoring}
+                            size={{ blockSize: 26, borderRadius: '50%', size: 14 }}
+                            title={t('pageEditor.history.restore', { ns: 'file' })}
+                            onClick={() => handleRestore(item)}
+                          />
                         </Flexbox>
-
-                        <Flexbox horizontal align={'center'} className={styles.metaLine} gap={8}>
-                          <Text className={styles.savedAt} type={'secondary'}>
-                            {dayjs(item.savedAt).fromNow()}
-                          </Text>
-                          <Tag className={styles.sourceTag} variant={'borderless'}>
-                            {saveSourceLabels[item.saveSource]}
-                          </Tag>
-                        </Flexbox>
-
-                        <Text className={styles.savedAt} type={'secondary'}>
-                          {formatAbsoluteTime(item.savedAt)}
-                        </Text>
-                      </Flexbox>
+                      )}
                     </Flexbox>
                   </Flexbox>
                 );
@@ -428,35 +419,6 @@ const HistoryPanel = memo(() => {
           ))}
         </Flexbox>
       )}
-      <Modal
-        destroyOnHidden
-        footer={false}
-        open={!!compareItem}
-        width={'min(92vw, 1200px)'}
-        styles={{
-          body: {
-            overflow: 'hidden',
-            padding: 0,
-          },
-        }}
-        title={
-          compareItem
-            ? t('pageEditor.history.compareModalTitle', {
-                ns: 'file',
-                version: compareItem.version,
-              })
-            : false
-        }
-        onCancel={() => setCompareVersion(null)}
-      >
-        {compareItem && (
-          <DocumentHistoryDiff
-            documentId={documentId}
-            headVersion={headVersion}
-            version={compareItem.version}
-          />
-        )}
-      </Modal>
     </Flexbox>
   );
 });

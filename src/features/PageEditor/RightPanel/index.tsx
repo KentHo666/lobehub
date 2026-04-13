@@ -11,30 +11,15 @@ import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors';
 import { useUserStore } from '@/store/user';
 import { userGeneralSettingsSelectors } from '@/store/user/selectors';
+import type { PanelSlideMotionDirection } from '@/utils/motion/panelSlideMotion';
+import {
+  isPanelLayerMotionDisabled,
+  panelSlideMotionVariantsLeft,
+} from '@/utils/motion/panelSlideMotion';
 
 import Conversation from '../Copilot/Conversation';
 import HistoryPanel from '../History';
 import { selectors, usePageEditorStore } from '../store';
-
-type MotionDirection = -1 | 0 | 1;
-
-const MOTION_OFFSET = 8;
-
-const motionVariants = {
-  animate: { opacity: 1, x: 0 },
-  exit: (direction: MotionDirection) => ({
-    opacity: 0,
-    x: -direction * MOTION_OFFSET,
-  }),
-  initial: (direction: MotionDirection) => ({
-    opacity: 0,
-    x: direction * MOTION_OFFSET,
-  }),
-  transition: {
-    duration: 0.28,
-    ease: [0.4, 0, 0.2, 1],
-  },
-} as const;
 
 const styles = createStaticStyles(({ css }) => ({
   inner: css`
@@ -64,8 +49,6 @@ const styles = createStaticStyles(({ css }) => ({
   `,
 }));
 
-const isMotionDisabled = (mode?: string) => mode === 'disabled';
-
 const ExitingFrozenContent = memo<{ children: ReactNode }>(({ children }) => {
   const isPresent = useIsPresent();
 
@@ -77,10 +60,10 @@ ExitingFrozenContent.displayName = 'PageEditorExitingFrozenContent';
 const PageEditorRightPanelContent = memo(() => {
   const rightPanelMode = usePageEditorStore(selectors.rightPanelMode);
   const animationMode = useUserStore(userGeneralSettingsSelectors.animationMode);
-  const shouldUseMotion = !isMotionDisabled(animationMode);
+  const shouldUseMotion = !isPanelLayerMotionDisabled(animationMode);
 
   const previousModeRef = useRef(rightPanelMode);
-  const directionRef = useRef<MotionDirection>(0);
+  const directionRef = useRef<PanelSlideMotionDirection>(0);
 
   if (previousModeRef.current !== rightPanelMode) {
     directionRef.current = rightPanelMode === 'history' ? 1 : -1;
@@ -108,8 +91,8 @@ const PageEditorRightPanelContent = memo(() => {
         exit="exit"
         initial="initial"
         key={activeContent.key}
-        transition={motionVariants.transition}
-        variants={motionVariants}
+        transition={panelSlideMotionVariantsLeft.transition}
+        variants={panelSlideMotionVariantsLeft}
       >
         <ExitingFrozenContent>{activeContent.node}</ExitingFrozenContent>
       </m.div>

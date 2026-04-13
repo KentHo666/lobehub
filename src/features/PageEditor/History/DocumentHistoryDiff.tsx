@@ -17,11 +17,18 @@ import { documentService } from '@/services/document';
 const styles = createStaticStyles(({ css }) => ({
   container: css`
     overflow: hidden;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+
+    min-height: 0;
+
     background: ${cssVar.colorBgContainer};
   `,
   content: css`
     overflow: auto;
-    max-height: min(72vh, 900px);
+    flex: 1;
+    min-height: 0;
   `,
   empty: css`
     padding: 24px;
@@ -79,7 +86,7 @@ const DocumentHistoryDiff = memo<DocumentHistoryDiffProps>(
     }, [data?.from.editorData, data?.to.editorData]);
 
     return (
-      <Flexbox className={styles.container} gap={0}>
+      <Flexbox className={styles.container} flex={1} gap={0}>
         {isLoading && !data ? (
           <Flexbox align={'center'} className={styles.empty} justify={'center'}>
             <Loading debugId={'DocumentHistoryDiff'} />
