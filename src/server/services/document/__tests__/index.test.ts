@@ -543,7 +543,7 @@ describe('DocumentService', () => {
           version: 1,
         }),
       );
-      expect(mockDocumentHistoryService.compactHistory).toHaveBeenCalledWith('doc-1');
+      expect(mockDocumentHistoryService.compactHistory).not.toHaveBeenCalled();
       expect(result).toEqual({ historyAppended: true, id: 'doc-1', version: 2 });
     });
 

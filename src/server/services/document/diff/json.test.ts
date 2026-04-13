@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { JsonPatchOperation } from './json';
+import type { JsonPatchDelta } from './json';
 import { applyJsonPatch, createJsonPatch } from './json';
 
 const createTextNode = (id: string, text: string) => ({
@@ -26,8 +26,14 @@ const createParagraphNode = (id: string, text?: string) => ({
   version: 1,
 });
 
-describe('json patch diff', () => {
-  it('should emit a stable remove op for arrays keyed by id', () => {
+const expectJsonPatch = (patch: JsonPatchDelta | undefined): JsonPatchDelta => {
+  expect(patch).toBeDefined();
+
+  return patch!;
+};
+
+describe('json diff', () => {
+  it('should emit an array delta for semantically matched deletions', () => {
     const base = {
       root: {
         children: [
@@ -43,13 +49,20 @@ describe('json patch diff', () => {
       },
     };
 
-    const patch = createJsonPatch(base, current);
+    const patch = expectJsonPatch(createJsonPatch(base, current));
 
-    expect(patch).toEqual([{ op: 'remove', path: ['root', 'children', 1] }]);
+    expect(patch).toEqual({
+      root: {
+        children: {
+          _1: [createParagraphNode('2'), 0, 0],
+          _t: 'a',
+        },
+      },
+    });
     expect(applyJsonPatch(base, patch)).toEqual(current);
   });
 
-  it('should emit an insert op for arrays keyed by id', () => {
+  it('should emit an array delta for semantically matched insertions', () => {
     const base = {
       root: {
         children: [createParagraphNode('1'), createParagraphNode('3', 'tail')],
@@ -65,25 +78,20 @@ describe('json patch diff', () => {
       },
     };
 
-    const patch = createJsonPatch(base, current);
+    const patch = expectJsonPatch(createJsonPatch(base, current));
 
-    expect(patch).toEqual([
-      { op: 'insert', path: ['root', 'children', 1], value: createParagraphNode('2') },
-    ]);
+    expect(patch).toEqual({
+      root: {
+        children: {
+          1: [createParagraphNode('2')],
+          _t: 'a',
+        },
+      },
+    });
     expect(applyJsonPatch(base, patch)).toEqual(current);
   });
 
-  it('should preserve legacy array add replay semantics', () => {
-    const base = { items: ['a', 'b'] };
-    const patch: JsonPatchOperation[] = [
-      { op: 'replace', path: ['items', 1], value: 'x' },
-      { op: 'add', path: ['items', 2], value: 'b' },
-    ];
-
-    expect(applyJsonPatch(base, patch)).toEqual({ items: ['a', 'x', 'b'] });
-  });
-
-  it('should align lexical nodes by content when ids are fully regenerated', () => {
+  it('should align rekeyed lexical nodes without degrading into array removals', () => {
     const base = {
       root: {
         children: [
@@ -103,10 +111,23 @@ describe('json patch diff', () => {
       },
     };
 
-    const patch = createJsonPatch(base, current);
+    const patch = expectJsonPatch(createJsonPatch(base, current));
+    const childDelta = (patch as Record<string, any>).root.children as Record<string, unknown>;
 
-    expect(patch.some((operation) => operation.op === 'remove')).toBe(false);
-    expect(patch.some((operation) => operation.op === 'insert')).toBe(false);
+    expect(childDelta._t).toBe('a');
+    expect(Object.keys(childDelta).filter((key) => key.startsWith('_') && key !== '_t')).toEqual(
+      [],
+    );
     expect(applyJsonPatch(base, patch)).toEqual(current);
+  });
+
+  it('should return undefined when two documents are identical', () => {
+    const document = {
+      root: {
+        children: [createParagraphNode('1', 'alpha')],
+      },
+    };
+
+    expect(createJsonPatch(document, document)).toBeUndefined();
   });
 });

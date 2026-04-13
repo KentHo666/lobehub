@@ -174,6 +174,9 @@ describe('Document history integration', () => {
     });
 
     expect(retainedRows.map((row) => row.version)).toEqual([2, 3]);
+    expect(retainedRows.map((row) => row.storageKind)).toEqual(['snapshot', 'snapshot']);
+    expect(retainedRows[0].baseVersion).toBeNull();
+    expect(retainedRows[1].baseVersion).toBeNull();
 
     const historyList = await documentService.listDocumentHistory({
       documentId: document.id,
@@ -200,7 +203,7 @@ describe('Document history integration', () => {
     expect(resolvedVersion3.editorData).toEqual(version3);
   });
 
-  it('should preserve an external base snapshot needed by retained patch rows during compaction', async () => {
+  it('should rebuild the retained window into a fresh checkpoint snapshot during compaction', async () => {
     const documentService = new DocumentService(serverDB, userId);
     const historyService = new DocumentHistoryService(serverDB, userId);
     const initialNodes = [
@@ -239,8 +242,10 @@ describe('Document history integration', () => {
       where: eq(documentHistories.documentId, document.id),
     });
 
-    expect(retainedRows.map((row) => row.version)).toEqual([1, 2, 3]);
-    expect(retainedRows.map((row) => row.storageKind)).toEqual(['snapshot', 'patch', 'patch']);
+    expect(retainedRows.map((row) => row.version)).toEqual([2, 3]);
+    expect(retainedRows.map((row) => row.storageKind)).toEqual(['snapshot', 'patch']);
+    expect(retainedRows[0].baseVersion).toBeNull();
+    expect(retainedRows[1].baseVersion).toBe(2);
 
     const resolvedVersion2 = await historyService.getDocumentHistoryVersion({
       documentId: document.id,
@@ -374,7 +379,7 @@ describe('Document history integration', () => {
     expect(retainedRows.map((row) => row.version)).toEqual([1, 2, 3]);
     expect(retainedRows.map((row) => row.storageKind)).toEqual(['snapshot', 'patch', 'patch']);
     expect(retainedRows[1].baseVersion).toBe(1);
-    expect(retainedRows[2].baseVersion).toBe(1);
+    expect(retainedRows[2].baseVersion).toBe(2);
 
     const resolvedVersion2 = await documentService.getDocumentHistoryVersion({
       documentId: document.id,
@@ -473,7 +478,7 @@ describe('Document history integration', () => {
     ]);
     expect(retainedRows.map((row) => row.storageKind)).toEqual(['snapshot', 'patch', 'patch']);
     expect(retainedRows[1].baseVersion).toBe(1);
-    expect(retainedRows[2].baseVersion).toBe(1);
+    expect(retainedRows[2].baseVersion).toBe(2);
 
     const resolvedVersion2 = await historyService.getDocumentHistoryVersion({
       documentId: document.id,
@@ -533,5 +538,55 @@ describe('Document history integration', () => {
     });
 
     expect(resolvedVersion2.editorData).toEqual(version2);
+  });
+
+  it('should create a new checkpoint snapshot after every ten stored history versions', async () => {
+    const documentService = new DocumentService(serverDB, userId);
+    const texts = Array.from(
+      { length: 18 },
+      (_, index) => `Paragraph ${index + 1}: ${'semantic content '.repeat(8).trim()}.`,
+    );
+    const versions = [createLexicalEditorDataFromTexts('checkpoint', texts)];
+
+    for (let version = 2; version <= 12; version += 1) {
+      const textIndex = (version - 2) % texts.length;
+      texts[textIndex] = `${texts[textIndex]} revision ${version}`;
+      versions.push(createLexicalEditorDataFromTexts('checkpoint', [...texts]));
+    }
+
+    const document = await documentService.createDocument({
+      content: 'v1',
+      editorData: versions[0],
+      title: 'Checkpoint interval doc',
+    });
+
+    for (const version of versions.slice(1)) {
+      await documentService.updateDocument(document.id, { editorData: version });
+    }
+
+    const retainedRows = await serverDB.query.documentHistories.findMany({
+      orderBy: [asc(documentHistories.version)],
+      where: eq(documentHistories.documentId, document.id),
+    });
+
+    expect(retainedRows.map((row) => row.version)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(
+      retainedRows.filter((row) => row.storageKind === 'snapshot').map((row) => row.version),
+    ).toEqual([1, 11]);
+    expect(
+      retainedRows.filter((row) => row.storageKind === 'patch').map((row) => row.baseVersion),
+    ).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+    const resolvedVersion10 = await documentService.getDocumentHistoryVersion({
+      documentId: document.id,
+      version: 10,
+    });
+    const resolvedVersion11 = await documentService.getDocumentHistoryVersion({
+      documentId: document.id,
+      version: 11,
+    });
+
+    expect(resolvedVersion10.editorData).toEqual(versions[9]);
+    expect(resolvedVersion11.editorData).toEqual(versions[10]);
   });
 });

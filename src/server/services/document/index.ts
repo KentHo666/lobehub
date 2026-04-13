@@ -188,6 +188,10 @@ export class DocumentService {
     return this.documentHistoryService.compareDocumentHistoryVersions(params, options);
   }
 
+  async compactDocumentHistory(id: string, limit?: number) {
+    return this.documentHistoryService.compactHistory(id, limit);
+  }
+
   /**
    * Delete document (recursively deletes children if it's a folder)
    */
@@ -308,8 +312,6 @@ export class DocumentService {
         if (params.parentId !== undefined) fileUpdates.parentId = params.parentId;
         await fileModel.update(currentDocument.fileId, fileUpdates);
       }
-
-      if (historyAppended) await documentHistoryService.compactHistory(id);
 
       return {
         historyAppended,

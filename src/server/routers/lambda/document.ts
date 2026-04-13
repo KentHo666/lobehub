@@ -1,11 +1,16 @@
 import { z } from 'zod';
 
+import {
+  DOCUMENT_HISTORY_RETENTION_LIMIT,
+  FREE_DOCUMENT_HISTORY_WINDOW_DAYS,
+} from '@/const/documentHistory';
 import { ChunkModel } from '@/database/models/chunk';
 import { DocumentModel } from '@/database/models/document';
 import { FileModel } from '@/database/models/file';
 import { MessageModel } from '@/database/models/message';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
+import { createAsyncCaller } from '@/server/routers/async';
 import { DocumentService } from '@/server/services/document';
 
 import {
@@ -14,8 +19,6 @@ import {
   listDocumentHistoryInputSchema,
   updateDocumentInputSchema,
 } from './_schema/documentHistory';
-
-const FREE_DOCUMENT_HISTORY_WINDOW_DAYS = 30;
 
 const getFreeDocumentHistorySince = () => {
   const now = Date.now();
@@ -227,10 +230,23 @@ export const documentRouter = router({
       const { id, editorData: editorDataString, ...params } = input;
       // Parse editorData from JSON string to object if present
       const editorData = editorDataString ? JSON.parse(editorDataString) : undefined;
-
-      return ctx.documentService.updateDocument(id, {
+      const result = await ctx.documentService.updateDocument(id, {
         ...params,
         editorData,
       });
+
+      if (result.historyAppended && result.version - 1 > DOCUMENT_HISTORY_RETENTION_LIMIT) {
+        void createAsyncCaller({ userId: ctx.userId })
+          .then((asyncCaller) =>
+            asyncCaller.document.compactHistory({
+              documentId: id,
+            }),
+          )
+          .catch((error) => {
+            console.error('Failed to schedule document history compaction:', error);
+          });
+      }
+
+      return result;
     }),
 });

@@ -10,6 +10,7 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import Loading from '@/components/Loading/BrandTextLoading';
+import { DOCUMENT_HISTORY_LIST_LIMIT } from '@/const/documentHistory';
 import NavHeader from '@/features/NavHeader';
 import ToggleRightPanelButton from '@/features/RightPanel/ToggleRightPanelButton';
 import { useClientDataSWR } from '@/libs/swr';
@@ -214,7 +215,7 @@ const HistoryPanel = memo(() => {
       documentService.listDocumentHistory({
         documentId: documentId!,
         includeCurrent: true,
-        limit: 50,
+        limit: DOCUMENT_HISTORY_LIST_LIMIT,
       }),
     { keepPreviousData: true },
   );

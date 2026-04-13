@@ -1,57 +1,34 @@
 import type { DocumentItem } from '@lobechat/database/schemas';
 import { documentHistories, documents } from '@lobechat/database/schemas';
-import { and, desc, eq, gte, lt, notInArray } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, lte } from 'drizzle-orm';
 
-import type { LobeChatDatabase, Transaction } from '@/database/type';
+import {
+  DOCUMENT_HISTORY_LIST_LIMIT,
+  DOCUMENT_HISTORY_PATCH_THRESHOLD,
+  DOCUMENT_HISTORY_RETENTION_LIMIT,
+  DOCUMENT_HISTORY_SNAPSHOT_INTERVAL,
+} from '@/const/documentHistory';
 
+import type { JsonPatchDelta } from './diff/json';
 import { applyJsonPatch, createJsonPatch, isOversizedJsonPatch } from './diff/json';
 import type {
   CompareDocumentHistoryVersionsParams,
   CompareDocumentHistoryVersionsResult,
+  DatabaseLike,
   DocumentHistoryAccessOptions,
   DocumentHistoryListItem,
   DocumentHistorySaveSource,
   DocumentHistoryStorageKind,
   DocumentHistoryVersionResult,
   GetDocumentHistoryVersionParams,
+  HistoryRowReference,
   ListDocumentHistoryParams,
   ListDocumentHistoryResult,
+  PersistedDocumentHistory,
+  ResolvedHistoryVersion,
+  RewriteDocumentHistoryOptions,
+  RewriteDocumentHistoryResult,
 } from './types';
-
-const DOCUMENT_HISTORY_LIMIT = 100;
-const DOCUMENT_HISTORY_LIST_LIMIT = 50;
-const DOCUMENT_HISTORY_PATCH_THRESHOLD = 0.7;
-const DOCUMENT_HISTORY_SNAPSHOT_INTERVAL = 5;
-
-type DatabaseLike = LobeChatDatabase | Transaction;
-
-type PersistedDocumentHistory = {
-  baseVersion: number | null;
-  documentId: string;
-  id?: string;
-  payload: Record<string, any> | Array<Record<string, any>>;
-  saveSource: DocumentHistorySaveSource;
-  savedAt: Date;
-  storageKind: Exclude<DocumentHistoryStorageKind, 'head'>;
-  version: number;
-};
-
-interface RewriteDocumentHistoryOptions {
-  dryRun?: boolean;
-  forceRewrite?: boolean;
-  limit?: number;
-}
-
-interface RewriteDocumentHistoryResult {
-  afterPatchCount: number;
-  afterSnapshotCount: number;
-  beforePatchCount: number;
-  beforeSnapshotCount: number;
-  documentId: string;
-  retainedRows: number;
-  rewritten: boolean;
-  trimmedRows: number;
-}
 
 const getDocumentVersion = (document: DocumentItem | undefined) => {
   if (!document) return 0;
@@ -79,16 +56,10 @@ export class DocumentHistoryService {
     savedAt: Date;
     version: number;
   }) => {
-    const snapshotEntry = await this.findLatestSnapshot(params.documentId);
-    const shouldStoreSnapshot = this.shouldStoreSnapshot(
-      params.version,
-      params.editorData,
-      snapshotEntry,
-    );
+    const latestEntry = await this.findLatestEntry(params.documentId);
 
-    let nextEntry: PersistedDocumentHistory;
-    if (shouldStoreSnapshot || !snapshotEntry) {
-      nextEntry = {
+    if (!latestEntry) {
+      await this.insertHistoryRow({
         baseVersion: null,
         documentId: params.documentId,
         payload: structuredClone(params.editorData),
@@ -96,47 +67,41 @@ export class DocumentHistoryService {
         savedAt: params.savedAt,
         storageKind: 'snapshot',
         version: params.version,
-      };
-    } else {
-      const patch = createJsonPatch(
-        snapshotEntry.payload as Record<string, any>,
-        params.editorData,
-      );
+      });
 
-      nextEntry =
-        patch.length === 0 ||
-        isOversizedJsonPatch(patch, params.editorData, DOCUMENT_HISTORY_PATCH_THRESHOLD)
-          ? {
-              baseVersion: null,
-              documentId: params.documentId,
-              payload: structuredClone(params.editorData),
-              saveSource: params.saveSource,
-              savedAt: params.savedAt,
-              storageKind: 'snapshot',
-              version: params.version,
-            }
-          : {
-              baseVersion: snapshotEntry.version,
-              documentId: params.documentId,
-              payload: patch,
-              saveSource: params.saveSource,
-              savedAt: params.savedAt,
-              storageKind: 'patch',
-              version: params.version,
-            };
+      return;
     }
 
-    await this.db.insert(documentHistories).values({
-      baseVersion: nextEntry.baseVersion ?? undefined,
-      documentId: nextEntry.documentId,
-      id: nextEntry.id,
-      payload: nextEntry.payload,
-      saveSource: nextEntry.saveSource,
-      savedAt: nextEntry.savedAt,
-      storageKind: nextEntry.storageKind,
-      userId: this.userId,
-      version: nextEntry.version,
-    });
+    const latestSnapshot = await this.findLatestSnapshot(params.documentId);
+    const previousVersion = await this.resolveVersion(latestEntry);
+    const patch = createJsonPatch(previousVersion.editorData, params.editorData);
+    const shouldStoreSnapshot =
+      !latestSnapshot ||
+      params.version - latestSnapshot.version >= DOCUMENT_HISTORY_SNAPSHOT_INTERVAL ||
+      !patch ||
+      isOversizedJsonPatch(patch, params.editorData, DOCUMENT_HISTORY_PATCH_THRESHOLD);
+
+    await this.insertHistoryRow(
+      shouldStoreSnapshot
+        ? {
+            baseVersion: null,
+            documentId: params.documentId,
+            payload: structuredClone(params.editorData),
+            saveSource: params.saveSource,
+            savedAt: params.savedAt,
+            storageKind: 'snapshot',
+            version: params.version,
+          }
+        : {
+            baseVersion: latestEntry.version,
+            documentId: params.documentId,
+            payload: patch,
+            saveSource: params.saveSource,
+            savedAt: params.savedAt,
+            storageKind: 'patch',
+            version: params.version,
+          },
+    );
   };
 
   compareDocumentHistoryVersions = async (
@@ -160,60 +125,13 @@ export class DocumentHistoryService {
     return { from, to };
   };
 
-  compactHistory = async (documentId: string, limit = DOCUMENT_HISTORY_LIMIT) => {
-    const retainedRows = await this.db.query.documentHistories.findMany({
-      columns: {
-        baseVersion: true,
-        storageKind: true,
-        version: true,
-      },
-      limit,
-      orderBy: [desc(documentHistories.version)],
-      where: and(
-        eq(documentHistories.documentId, documentId),
-        eq(documentHistories.userId, this.userId),
-      ),
-    });
-
-    if (retainedRows.length < limit) return;
-
-    const retainedVersions = new Set(retainedRows.map((row) => row.version));
-    const pinnedBaseVersions = Array.from(
-      new Set(
-        retainedRows.flatMap((row) => {
-          if (
-            row.storageKind !== 'patch' ||
-            row.baseVersion === null ||
-            retainedVersions.has(row.baseVersion)
-          ) {
-            return [];
-          }
-
-          return [row.baseVersion];
-        }),
-      ),
-    );
-    const oldestRetainedVersion = retainedRows.at(-1)?.version;
-
-    if (!oldestRetainedVersion) return;
-
-    await this.db
-      .delete(documentHistories)
-      .where(
-        and(
-          eq(documentHistories.documentId, documentId),
-          eq(documentHistories.userId, this.userId),
-          lt(documentHistories.version, oldestRetainedVersion),
-          pinnedBaseVersions.length > 0
-            ? notInArray(documentHistories.version, pinnedBaseVersions)
-            : undefined,
-        ),
-      );
+  compactHistory = async (documentId: string, limit = DOCUMENT_HISTORY_RETENTION_LIMIT) => {
+    await this.rewriteHistory(documentId, { limit });
   };
 
   rebuildHistory = async (
     documentId: string,
-    limit = DOCUMENT_HISTORY_LIMIT,
+    limit = DOCUMENT_HISTORY_RETENTION_LIMIT,
     options?: Pick<RewriteDocumentHistoryOptions, 'dryRun'>,
   ): Promise<RewriteDocumentHistoryResult> => {
     return this.rewriteHistory(documentId, { dryRun: options?.dryRun, forceRewrite: true, limit });
@@ -254,7 +172,7 @@ export class DocumentHistoryService {
     }
 
     return {
-      editorData: await this.resolveRow(historyRow),
+      editorData: (await this.resolveVersion(historyRow)).editorData,
       isCurrent: false,
       saveSource: historyRow.saveSource as DocumentHistorySaveSource,
       savedAt: historyRow.savedAt,
@@ -266,7 +184,10 @@ export class DocumentHistoryService {
     params: ListDocumentHistoryParams,
     options?: DocumentHistoryAccessOptions,
   ): Promise<ListDocumentHistoryResult> => {
-    const limit = Math.min(params.limit ?? DOCUMENT_HISTORY_LIST_LIMIT, DOCUMENT_HISTORY_LIMIT);
+    const limit = Math.min(
+      params.limit ?? DOCUMENT_HISTORY_LIST_LIMIT,
+      DOCUMENT_HISTORY_RETENTION_LIMIT,
+    );
     const headDocument = await this.findHeadDocument(params.documentId);
     const headVersion = getDocumentVersion(headDocument);
 
@@ -329,83 +250,6 @@ export class DocumentHistoryService {
     };
   };
 
-  private findHeadDocument = async (documentId: string) => {
-    return this.db.query.documents.findFirst({
-      where: and(eq(documents.id, documentId), eq(documents.userId, this.userId)),
-    });
-  };
-
-  private findLatestSnapshot = async (documentId: string) => {
-    return this.db.query.documentHistories.findFirst({
-      orderBy: [desc(documentHistories.version)],
-      where: and(
-        eq(documentHistories.documentId, documentId),
-        eq(documentHistories.userId, this.userId),
-        eq(documentHistories.storageKind, 'snapshot'),
-      ),
-    });
-  };
-
-  private resolveRow = async (
-    row: {
-      baseVersion: number | null;
-      documentId: string;
-      payload: unknown;
-      storageKind: string;
-      version: number;
-    },
-    allRows?: Array<{
-      baseVersion: number | null;
-      documentId: string;
-      payload: unknown;
-      storageKind: string;
-      version: number;
-    }>,
-    cache: Map<number, Record<string, any>> = new Map(),
-  ): Promise<Record<string, any>> => {
-    const cached = cache.get(row.version);
-    if (cached) return cached;
-
-    if (row.storageKind === 'snapshot') {
-      const snapshot = structuredClone(row.payload as Record<string, any>);
-      cache.set(row.version, snapshot);
-      return snapshot;
-    }
-
-    if (row.storageKind !== 'patch' || row.baseVersion === null) {
-      const fallback = structuredClone((row.payload as Record<string, any>) ?? {});
-      cache.set(row.version, fallback);
-      return fallback;
-    }
-
-    const baseRow =
-      allRows?.find(
-        (item) => item.documentId === row.documentId && item.version === row.baseVersion,
-      ) ??
-      (await this.db.query.documentHistories.findFirst({
-        where: and(
-          eq(documentHistories.documentId, row.documentId),
-          eq(documentHistories.userId, this.userId),
-          eq(documentHistories.version, row.baseVersion),
-        ),
-      }));
-
-    if (!baseRow) {
-      throw new Error(`Base history version not found: ${row.baseVersion}`);
-    }
-
-    const resolvedBase = await this.resolveRow(baseRow, allRows, cache);
-    const resolved = applyJsonPatch(
-      resolvedBase,
-      structuredClone(row.payload as Array<Record<string, any>>) as Parameters<
-        typeof applyJsonPatch
-      >[1],
-    );
-
-    cache.set(row.version, resolved);
-    return resolved;
-  };
-
   private buildPersistedRows = (
     documentId: string,
     retainedRows: Array<{
@@ -417,25 +261,22 @@ export class DocumentHistoryService {
     resolvedVersions: Map<number, Record<string, any>>,
   ) => {
     const persistedRows: PersistedDocumentHistory[] = [];
-    let currentSnapshotVersion: number | null = null;
-    let currentSnapshotPayload: Record<string, any> | null = null;
+    let latestSnapshotVersion: number | null = null;
+    let previousVersion: ResolvedHistoryVersion | null = null;
 
-    for (const [index, row] of retainedRows.entries()) {
+    for (const row of retainedRows) {
       const editorData = resolvedVersions.get(row.version)!;
-      const forceSnapshot =
-        index === 0 || index % DOCUMENT_HISTORY_SNAPSHOT_INTERVAL === 0 || !currentSnapshotPayload;
-
-      const patch =
-        forceSnapshot || !currentSnapshotPayload
-          ? []
-          : createJsonPatch(currentSnapshotPayload, editorData);
-
-      const shouldSnapshot =
-        forceSnapshot ||
-        patch.length === 0 ||
+      const patch = previousVersion
+        ? createJsonPatch(previousVersion.editorData, editorData)
+        : undefined;
+      const shouldStoreSnapshot =
+        !previousVersion ||
+        latestSnapshotVersion === null ||
+        row.version - latestSnapshotVersion >= DOCUMENT_HISTORY_SNAPSHOT_INTERVAL ||
+        !patch ||
         isOversizedJsonPatch(patch, editorData, DOCUMENT_HISTORY_PATCH_THRESHOLD);
 
-      const persistedRow: PersistedDocumentHistory = shouldSnapshot
+      const persistedRow: PersistedDocumentHistory = shouldStoreSnapshot
         ? {
             baseVersion: null,
             documentId,
@@ -447,22 +288,25 @@ export class DocumentHistoryService {
             version: row.version,
           }
         : {
-            baseVersion: currentSnapshotVersion,
+            baseVersion: previousVersion!.version,
             documentId,
             id: row.id,
-            payload: patch,
+            payload: patch as JsonPatchDelta,
             saveSource: row.saveSource as DocumentHistorySaveSource,
             savedAt: row.savedAt,
             storageKind: 'patch',
             version: row.version,
           };
 
-      persistedRows.push(persistedRow);
-
       if (persistedRow.storageKind === 'snapshot') {
-        currentSnapshotPayload = structuredClone(editorData);
-        currentSnapshotVersion = row.version;
+        latestSnapshotVersion = row.version;
       }
+
+      previousVersion = {
+        editorData: structuredClone(editorData),
+        version: row.version,
+      };
+      persistedRows.push(persistedRow);
     }
 
     return persistedRows;
@@ -474,6 +318,33 @@ export class DocumentHistoryService {
       where: and(
         eq(documentHistories.documentId, documentId),
         eq(documentHistories.userId, this.userId),
+      ),
+    });
+  };
+
+  private findHeadDocument = async (documentId: string) => {
+    return this.db.query.documents.findFirst({
+      where: and(eq(documents.id, documentId), eq(documents.userId, this.userId)),
+    });
+  };
+
+  private findLatestEntry = async (documentId: string) => {
+    return this.db.query.documentHistories.findFirst({
+      orderBy: [desc(documentHistories.version)],
+      where: and(
+        eq(documentHistories.documentId, documentId),
+        eq(documentHistories.userId, this.userId),
+      ),
+    });
+  };
+
+  private findLatestSnapshot = async (documentId: string) => {
+    return this.db.query.documentHistories.findFirst({
+      orderBy: [desc(documentHistories.version)],
+      where: and(
+        eq(documentHistories.documentId, documentId),
+        eq(documentHistories.userId, this.userId),
+        eq(documentHistories.storageKind, 'snapshot'),
       ),
     });
   };
@@ -494,12 +365,109 @@ export class DocumentHistoryService {
     );
   };
 
+  private insertHistoryRow = async (row: PersistedDocumentHistory) => {
+    await this.db.insert(documentHistories).values({
+      baseVersion: row.baseVersion ?? undefined,
+      documentId: row.documentId,
+      id: row.id,
+      payload: row.payload,
+      saveSource: row.saveSource,
+      savedAt: row.savedAt,
+      storageKind: row.storageKind,
+      userId: this.userId,
+      version: row.version,
+    });
+  };
+
+  private upsertHistoryRow = async (row: PersistedDocumentHistory) => {
+    if (!row.id) {
+      await this.insertHistoryRow(row);
+
+      return;
+    }
+
+    await this.db
+      .insert(documentHistories)
+      .values({
+        baseVersion: row.baseVersion ?? undefined,
+        documentId: row.documentId,
+        id: row.id,
+        payload: row.payload,
+        saveSource: row.saveSource,
+        savedAt: row.savedAt,
+        storageKind: row.storageKind,
+        userId: this.userId,
+        version: row.version,
+      })
+      .onConflictDoUpdate({
+        set: {
+          baseVersion: row.baseVersion ?? null,
+          id: row.id,
+          payload: row.payload,
+          saveSource: row.saveSource,
+          savedAt: row.savedAt,
+          storageKind: row.storageKind,
+        },
+        target: [documentHistories.documentId, documentHistories.version],
+      });
+  };
+
+  private resolveVersion = async (
+    row: HistoryRowReference,
+    allRows?: HistoryRowReference[],
+    cache: Map<number, Record<string, any>> = new Map(),
+  ): Promise<ResolvedHistoryVersion> => {
+    const cached = cache.get(row.version);
+    if (cached) return { editorData: cached, version: row.version };
+
+    if (row.storageKind === 'snapshot') {
+      const snapshot = structuredClone(row.payload as Record<string, any>);
+      cache.set(row.version, snapshot);
+
+      return { editorData: snapshot, version: row.version };
+    }
+
+    if (row.storageKind !== 'patch' || row.baseVersion === null) {
+      const fallback = structuredClone((row.payload as Record<string, any>) ?? {});
+      cache.set(row.version, fallback);
+
+      return { editorData: fallback, version: row.version };
+    }
+
+    const baseRow =
+      allRows?.find(
+        (item) => item.documentId === row.documentId && item.version === row.baseVersion,
+      ) ??
+      (await this.db.query.documentHistories.findFirst({
+        where: and(
+          eq(documentHistories.documentId, row.documentId),
+          eq(documentHistories.userId, this.userId),
+          eq(documentHistories.version, row.baseVersion),
+        ),
+      }));
+
+    if (!baseRow) {
+      throw new Error(`Base history version not found: ${row.baseVersion}`);
+    }
+
+    const resolvedBase = await this.resolveVersion(baseRow, allRows, cache);
+    const resolved = applyJsonPatch(
+      resolvedBase.editorData,
+      structuredClone(row.payload as JsonPatchDelta),
+    );
+
+    cache.set(row.version, resolved);
+
+    return { editorData: resolved, version: row.version };
+  };
+
   private rewriteHistory = async (
     documentId: string,
     options: RewriteDocumentHistoryOptions = {},
   ): Promise<RewriteDocumentHistoryResult> => {
     const allRows = await this.findAllRows(documentId);
-    const limit = options.limit ?? DOCUMENT_HISTORY_LIMIT;
+    const limit = options.limit ?? DOCUMENT_HISTORY_RETENTION_LIMIT;
+    const latestCapturedVersion = allRows[0]?.version ?? 0;
 
     if (allRows.length === 0) {
       return {
@@ -517,6 +485,7 @@ export class DocumentHistoryService {
     const retainedRows = allRows
       .slice(0, limit)
       .sort((left, right) => left.version - right.version);
+    const firstRetainedVersion = retainedRows.at(0)?.version;
     const trimmedRows = Math.max(allRows.length - retainedRows.length, 0);
 
     if (!options.forceRewrite && trimmedRows === 0) {
@@ -537,8 +506,8 @@ export class DocumentHistoryService {
     const resolvedVersions = new Map<number, Record<string, any>>();
 
     for (const row of retainedRows) {
-      const resolved = await this.resolveRow(row, allRows, resolvedVersions);
-      resolvedVersions.set(row.version, resolved);
+      const resolved = await this.resolveVersion(row, allRows, resolvedVersions);
+      resolvedVersions.set(row.version, resolved.editorData);
     }
 
     const persistedRows = this.buildPersistedRows(documentId, retainedRows, resolvedVersions);
@@ -564,21 +533,14 @@ export class DocumentHistoryService {
         and(
           eq(documentHistories.documentId, documentId),
           eq(documentHistories.userId, this.userId),
+          firstRetainedVersion === undefined
+            ? lte(documentHistories.version, latestCapturedVersion)
+            : lt(documentHistories.version, firstRetainedVersion),
         ),
       );
 
     for (const row of persistedRows) {
-      await this.db.insert(documentHistories).values({
-        baseVersion: row.baseVersion ?? undefined,
-        documentId: row.documentId,
-        id: row.id,
-        payload: row.payload,
-        saveSource: row.saveSource,
-        savedAt: row.savedAt,
-        storageKind: row.storageKind,
-        userId: this.userId,
-        version: row.version,
-      });
+      await this.upsertHistoryRow(row);
     }
 
     return {
@@ -591,24 +553,5 @@ export class DocumentHistoryService {
       rewritten: true,
       trimmedRows,
     };
-  };
-
-  private shouldStoreSnapshot = (
-    version: number,
-    editorData: Record<string, any>,
-    snapshotEntry:
-      | {
-          payload: unknown;
-          version: number;
-        }
-      | undefined,
-  ) => {
-    if (!snapshotEntry) return true;
-    if (version % DOCUMENT_HISTORY_SNAPSHOT_INTERVAL === 1) return true;
-
-    const patch = createJsonPatch(snapshotEntry.payload as Record<string, any>, editorData);
-    if (patch.length === 0) return true;
-
-    return isOversizedJsonPatch(patch, editorData, DOCUMENT_HISTORY_PATCH_THRESHOLD);
   };
 }
