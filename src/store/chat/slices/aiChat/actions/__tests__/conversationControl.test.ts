@@ -10,6 +10,22 @@ import { resetTestEnvironment } from './helpers';
 // Keep zustand mock as it's needed globally
 vi.mock('zustand/traditional');
 
+// Mock the tRPC client & agentRuntimeService so the import chain doesn't pull
+// server-only code (cloud business packages, redis envs) into the test env.
+vi.mock('@/libs/trpc/client', () => ({
+  lambdaClient: {
+    aiAgent: {
+      processHumanIntervention: { mutate: vi.fn().mockResolvedValue({ success: true }) },
+    },
+  },
+}));
+
+vi.mock('@/services/agentRuntime', () => ({
+  agentRuntimeService: {
+    handleHumanIntervention: vi.fn().mockResolvedValue({ success: true }),
+  },
+}));
+
 beforeEach(() => {
   resetTestEnvironment();
 });
@@ -593,6 +609,227 @@ describe('ConversationControl actions', () => {
 
       // Should not call internal_execAgentRuntime when tool message not found
       expect(internal_execAgentRuntimeSpy).not.toHaveBeenCalled();
+    });
+
+    describe('server-mode branch', () => {
+      it('should call agentRuntimeService.handleHumanIntervention with action=approve and NOT run local runtime', async () => {
+        const { agentRuntimeService } = await import('@/services/agentRuntime');
+        const handleHumanInterventionSpy = vi
+          .spyOn(agentRuntimeService, 'handleHumanIntervention')
+          .mockResolvedValue({ success: true });
+
+        const { result } = renderHook(() => useChatStore());
+
+        const agentId = 'server-agent';
+        const topicId = 'server-topic';
+        const chatKey = messageMapKey({ agentId, topicId });
+
+        const toolMessage = createMockMessage({
+          id: 'tool-msg-1',
+          plugin: {
+            apiName: 'search',
+            arguments: '{"q":"test"}',
+            identifier: 'web-search',
+            type: 'default',
+          },
+          role: 'tool',
+        });
+
+        act(() => {
+          useChatStore.setState({
+            activeAgentId: agentId,
+            activeTopicId: topicId,
+            dbMessagesMap: { [chatKey]: [toolMessage] },
+            messagesMap: { [chatKey]: [toolMessage] },
+          });
+
+          // Simulate a running server operation
+          result.current.startOperation({
+            context: { agentId, topicId, threadId: null },
+            metadata: { serverOperationId: 'server-op-xyz' },
+            type: 'execServerAgentRuntime',
+          });
+        });
+
+        vi.spyOn(result.current, 'optimisticUpdateMessagePlugin').mockResolvedValue(undefined);
+        const internal_execAgentRuntimeSpy = vi
+          .spyOn(result.current, 'internal_execAgentRuntime')
+          .mockResolvedValue(undefined);
+
+        await act(async () => {
+          await result.current.approveToolCalling('tool-msg-1', 'group-1');
+        });
+
+        expect(handleHumanInterventionSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'approve',
+            operationId: 'server-op-xyz',
+            toolMessageId: 'tool-msg-1',
+            data: expect.objectContaining({
+              approvedToolCall: expect.any(Object),
+            }),
+          }),
+        );
+        expect(internal_execAgentRuntimeSpy).not.toHaveBeenCalled();
+
+        handleHumanInterventionSpy.mockRestore();
+      });
+
+      it('should fall through to client-mode runtime when no server operation is running', async () => {
+        const { agentRuntimeService } = await import('@/services/agentRuntime');
+        const handleHumanInterventionSpy = vi
+          .spyOn(agentRuntimeService, 'handleHumanIntervention')
+          .mockResolvedValue({ success: true });
+
+        const { result } = renderHook(() => useChatStore());
+
+        const agentId = 'local-agent';
+        const topicId = 'local-topic';
+        const chatKey = messageMapKey({ agentId, topicId });
+
+        const toolMessage = createMockMessage({
+          id: 'tool-msg-1',
+          plugin: { identifier: 'x', type: 'default', arguments: '{}', apiName: 'y' },
+          role: 'tool',
+        });
+
+        act(() => {
+          useChatStore.setState({
+            activeAgentId: agentId,
+            activeTopicId: topicId,
+            dbMessagesMap: { [chatKey]: [toolMessage] },
+            messagesMap: { [chatKey]: [toolMessage] },
+          });
+        });
+
+        vi.spyOn(result.current, 'optimisticUpdateMessagePlugin').mockResolvedValue(undefined);
+        vi.spyOn(result.current, 'internal_createAgentState').mockReturnValue({
+          state: {} as any,
+          context: { phase: 'init' } as any,
+          agentConfig: createMockResolvedAgentConfig(),
+        });
+        const internal_execAgentRuntimeSpy = vi
+          .spyOn(result.current, 'internal_execAgentRuntime')
+          .mockResolvedValue(undefined);
+
+        await act(async () => {
+          await result.current.approveToolCalling('tool-msg-1', 'group-1');
+        });
+
+        expect(handleHumanInterventionSpy).not.toHaveBeenCalled();
+        expect(internal_execAgentRuntimeSpy).toHaveBeenCalled();
+
+        handleHumanInterventionSpy.mockRestore();
+      });
+    });
+  });
+
+  describe('rejectToolCalling server-mode branch', () => {
+    it('calls agentRuntimeService.handleHumanIntervention with action=reject', async () => {
+      const { agentRuntimeService } = await import('@/services/agentRuntime');
+      const handleHumanInterventionSpy = vi
+        .spyOn(agentRuntimeService, 'handleHumanIntervention')
+        .mockResolvedValue({ success: true });
+
+      const { result } = renderHook(() => useChatStore());
+
+      const agentId = 'server-agent';
+      const topicId = 'server-topic';
+      const chatKey = messageMapKey({ agentId, topicId });
+
+      const toolMessage = createMockMessage({ id: 'tool-msg-1', role: 'tool' });
+
+      act(() => {
+        useChatStore.setState({
+          activeAgentId: agentId,
+          activeTopicId: topicId,
+          dbMessagesMap: { [chatKey]: [toolMessage] },
+          messagesMap: { [chatKey]: [toolMessage] },
+        });
+
+        result.current.startOperation({
+          context: { agentId, topicId, threadId: null },
+          metadata: { serverOperationId: 'server-op-xyz' },
+          type: 'execServerAgentRuntime',
+        });
+      });
+
+      vi.spyOn(result.current, 'optimisticUpdateMessagePlugin').mockResolvedValue(undefined);
+      vi.spyOn(result.current, 'optimisticUpdateMessageContent').mockResolvedValue(undefined);
+
+      await act(async () => {
+        await result.current.rejectToolCalling('tool-msg-1', 'not appropriate');
+      });
+
+      expect(handleHumanInterventionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'reject',
+          operationId: 'server-op-xyz',
+          toolMessageId: 'tool-msg-1',
+          reason: 'not appropriate',
+        }),
+      );
+
+      handleHumanInterventionSpy.mockRestore();
+    });
+  });
+
+  describe('rejectAndContinueToolCalling server-mode branch', () => {
+    it('calls agentRuntimeService.handleHumanIntervention with action=reject_continue and skips local runtime', async () => {
+      const { agentRuntimeService } = await import('@/services/agentRuntime');
+      const handleHumanInterventionSpy = vi
+        .spyOn(agentRuntimeService, 'handleHumanIntervention')
+        .mockResolvedValue({ success: true });
+
+      const { result } = renderHook(() => useChatStore());
+
+      const agentId = 'server-agent';
+      const topicId = 'server-topic';
+      const chatKey = messageMapKey({ agentId, topicId });
+
+      const toolMessage = createMockMessage({ id: 'tool-msg-1', role: 'tool' });
+
+      act(() => {
+        useChatStore.setState({
+          activeAgentId: agentId,
+          activeTopicId: topicId,
+          dbMessagesMap: { [chatKey]: [toolMessage] },
+          messagesMap: { [chatKey]: [toolMessage] },
+        });
+
+        result.current.startOperation({
+          context: { agentId, topicId, threadId: null },
+          metadata: { serverOperationId: 'server-op-xyz' },
+          type: 'execServerAgentRuntime',
+        });
+      });
+
+      vi.spyOn(result.current, 'optimisticUpdateMessagePlugin').mockResolvedValue(undefined);
+      vi.spyOn(result.current, 'optimisticUpdateMessageContent').mockResolvedValue(undefined);
+      const internal_execAgentRuntimeSpy = vi
+        .spyOn(result.current, 'internal_execAgentRuntime')
+        .mockResolvedValue(undefined);
+      // Ensure client rejectToolCalling is NOT invoked in server-mode path
+      const rejectToolCallingSpy = vi
+        .spyOn(result.current, 'rejectToolCalling')
+        .mockResolvedValue(undefined);
+
+      await act(async () => {
+        await result.current.rejectAndContinueToolCalling('tool-msg-1', 'too risky');
+      });
+
+      expect(handleHumanInterventionSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'reject_continue',
+          operationId: 'server-op-xyz',
+          toolMessageId: 'tool-msg-1',
+          reason: 'too risky',
+        }),
+      );
+      expect(internal_execAgentRuntimeSpy).not.toHaveBeenCalled();
+      expect(rejectToolCallingSpy).not.toHaveBeenCalled();
+
+      handleHumanInterventionSpy.mockRestore();
     });
   });
 

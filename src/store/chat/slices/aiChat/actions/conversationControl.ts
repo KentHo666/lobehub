@@ -3,6 +3,8 @@ import { type AgentRuntimeContext } from '@lobechat/agent-runtime';
 import { MESSAGE_CANCEL_FLAT } from '@lobechat/const';
 import { type ConversationContext } from '@lobechat/types';
 
+import { agentRuntimeService } from '@/services/agentRuntime';
+import { operationSelectors } from '@/store/chat/slices/operation/selectors';
 import { type ChatStore } from '@/store/chat/store';
 import { type StoreSetter } from '@/store/types';
 
@@ -27,6 +29,27 @@ export class ConversationControlActionImpl {
     void set;
     this.#get = get;
   }
+
+  /**
+   * Look up the server operation id for a running `execServerAgentRuntime`
+   * operation in the given context. Returns `undefined` when the current
+   * runtime is client-mode, in which case callers fall through to the
+   * `internal_execAgentRuntime` path.
+   */
+  #getServerOperationId = (context: ConversationContext): string | undefined => {
+    const { agentId, topicId, threadId } = context;
+    if (!agentId) return undefined;
+    const ops = operationSelectors.getOperationsByContext({
+      agentId,
+      threadId: threadId ?? null,
+      topicId: topicId ?? null,
+    })(this.#get());
+    const runningServer = ops.find(
+      (op) =>
+        op.type === 'execServerAgentRuntime' && op.status === 'running' && !op.metadata?.isAborting,
+    );
+    return runningServer?.metadata?.serverOperationId as string | undefined;
+  };
 
   stopGenerateMessage = (): void => {
     const { activeAgentId, activeTopicId, cancelOperations } = this.#get();
@@ -145,6 +168,31 @@ export class ConversationControlActionImpl {
       { intervention: { status: 'approved' } },
       optimisticContext,
     );
+
+    // 2.5. Server-mode short-circuit: forward approval to the server. The
+    // server-side `handleHumanIntervention` will persist the intervention,
+    // schedule the next step, and emit events back via the same stream. The
+    // client does NOT spin up a local runtime in this branch.
+    const serverOpId = this.#getServerOperationId(effectiveContext);
+    if (serverOpId) {
+      try {
+        await agentRuntimeService.handleHumanIntervention({
+          action: 'approve',
+          data: { approvedToolCall: toolMessage.plugin },
+          operationId: serverOpId,
+          toolMessageId,
+        });
+        completeOperation(operationId);
+      } catch (error) {
+        const err = error as Error;
+        console.error('[approveToolCalling][server] tRPC failed:', err);
+        this.#get().failOperation(operationId, {
+          type: 'approveToolCalling',
+          message: err.message || 'Unknown error',
+        });
+      }
+      return;
+    }
 
     // 3. Get current messages for state construction using context
     const chatKey = messageMapKey({ agentId, topicId, threadId, scope });
@@ -503,6 +551,23 @@ export class ConversationControlActionImpl {
       optimisticContext,
     );
 
+    // Server-mode: forward rejection to the server so it can halt the
+    // operation (`status='interrupted' + reason='human_rejected'`). Client
+    // still applies the optimistic writes above for instant UI feedback.
+    const serverOpId = this.#getServerOperationId(effectiveContext);
+    if (serverOpId) {
+      try {
+        await agentRuntimeService.handleHumanIntervention({
+          action: 'reject',
+          operationId: serverOpId,
+          reason,
+          toolMessageId: messageId,
+        });
+      } catch (error) {
+        console.error('[rejectToolCalling][server] tRPC failed:', error);
+      }
+    }
+
     completeOperation(operationId);
   };
 
@@ -511,9 +576,6 @@ export class ConversationControlActionImpl {
     reason?: string,
     context?: ConversationContext,
   ): Promise<void> => {
-    // Pass context to rejectToolCalling for proper context isolation
-    await this.#get().rejectToolCalling(messageId, reason, context);
-
     const toolMessage = dbMessageSelectors.getDbMessageById(messageId)(this.#get());
     if (!toolMessage) return;
 
@@ -527,6 +589,63 @@ export class ConversationControlActionImpl {
     };
 
     const { agentId, topicId, threadId, scope } = effectiveContext;
+
+    // Server-mode: do optimistic writes here (mirroring rejectToolCalling)
+    // and call the single `reject_continue` endpoint. Server handles both
+    // the rejection persistence and the resume-as-user-input transition.
+    // We skip calling `rejectToolCalling` to avoid sending a duplicate
+    // `reject` (which would halt the op) before the continue signal.
+    const serverOpId = this.#getServerOperationId(effectiveContext);
+    if (serverOpId) {
+      const { operationId } = startOperation({
+        type: 'rejectToolCalling',
+        context: {
+          agentId,
+          topicId: topicId ?? undefined,
+          threadId: threadId ?? undefined,
+          scope,
+          messageId,
+        },
+      });
+
+      const optimisticContext = { operationId };
+      await this.#get().optimisticUpdateMessagePlugin(
+        messageId,
+        { intervention: { rejectedReason: reason, status: 'rejected' } as any },
+        optimisticContext,
+      );
+      const toolContent = reason
+        ? `User reject this tool calling with reason: ${reason}`
+        : 'User reject this tool calling without reason';
+      await this.#get().optimisticUpdateMessageContent(
+        messageId,
+        toolContent,
+        undefined,
+        optimisticContext,
+      );
+
+      try {
+        await agentRuntimeService.handleHumanIntervention({
+          action: 'reject_continue',
+          operationId: serverOpId,
+          reason,
+          toolMessageId: messageId,
+        });
+        completeOperation(operationId);
+      } catch (error) {
+        const err = error as Error;
+        console.error('[rejectAndContinueToolCalling][server] tRPC failed:', err);
+        this.#get().failOperation(operationId, {
+          type: 'rejectToolCalling',
+          message: err.message || 'Unknown error',
+        });
+      }
+      return;
+    }
+
+    // Client-mode path: reject first (persists rejection + updates content),
+    // then spin up a local runtime with phase='user_input' to continue.
+    await this.#get().rejectToolCalling(messageId, reason, context);
 
     // Create an operation to manage the continue execution
     const { operationId } = startOperation({

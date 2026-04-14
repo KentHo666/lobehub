@@ -266,9 +266,13 @@ export class GatewayActionImpl {
       this.#get().internal_updateTopicLoading(result.topicId, true);
     }
 
-    // Create a dedicated operation for gateway execution with correct context
+    // Create a dedicated operation for gateway execution with correct context.
+    // Stash the server operation id in metadata so human-intervention flows
+    // (approve/reject/reject_continue) can look it up and call the server
+    // without needing an out-of-band lookup.
     const { operationId: gatewayOpId } = this.#get().startOperation({
       context: execContext,
+      metadata: { serverOperationId: result.operationId },
       type: 'execServerAgentRuntime',
     });
 
@@ -347,9 +351,11 @@ export class GatewayActionImpl {
       topicId,
     };
 
-    // Create a local operation for UI loading state
+    // Create a local operation for UI loading state, stashing the server op id
+    // so intervention flows can find it after reconnect as well.
     const { operationId: gatewayOpId } = this.#get().startOperation({
       context,
+      metadata: { serverOperationId: operationId },
       type: 'execServerAgentRuntime',
     });
 
