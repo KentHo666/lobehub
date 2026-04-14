@@ -51,6 +51,7 @@ vi.mock('@lobehub/ui', () => ({
   Icon: () => <div />,
   Markdown: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Progress: () => <div data-testid="workspace-progress-bar" />,
+  ShikiLobeTheme: {},
   Skeleton: { Button: () => <div /> },
   Tag: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
