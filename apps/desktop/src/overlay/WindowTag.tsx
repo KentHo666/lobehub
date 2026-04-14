@@ -1,34 +1,40 @@
 import type { ScreenCaptureWindowInfo } from '@lobechat/electron-client-ipc';
 import { memo } from 'react';
 
+import { OVERLAY_LAYOUT } from './constants';
+import * as styles from './overlay.css.ts';
+
 interface WindowTagProps {
+  viewportWidth: number;
   window: ScreenCaptureWindowInfo;
 }
 
-const WindowTag = memo<WindowTagProps>(({ window: win }) => {
-  const { x, y } = win.bounds;
+const WindowTag = memo<WindowTagProps>(({ viewportWidth, window: win }) => {
+  const { width, x, y } = win.overlayBounds;
+  const maxWidth = Math.min(
+    Math.max(width - OVERLAY_LAYOUT.windowTagHorizontalInset * 2, 0),
+    OVERLAY_LAYOUT.windowTagMaxWidth,
+  );
+  const left = Math.min(
+    Math.max(x + OVERLAY_LAYOUT.windowTagHorizontalInset, OVERLAY_LAYOUT.windowTagHorizontalInset),
+    Math.max(
+      viewportWidth - maxWidth - OVERLAY_LAYOUT.windowTagHorizontalInset,
+      OVERLAY_LAYOUT.windowTagHorizontalInset,
+    ),
+  );
 
   return (
     <div
+      className={styles.windowTag}
       style={{
-        background: 'rgba(0, 0, 0, 0.7)',
-        borderRadius: 4,
-        color: '#fff',
-        fontSize: 12,
-        left: x,
-        maxWidth: 200,
-        overflow: 'hidden',
-        padding: '2px 8px',
-        pointerEvents: 'none',
-        position: 'absolute',
-        textOverflow: 'ellipsis',
-        top: y - 24,
-        whiteSpace: 'nowrap',
-        zIndex: 10,
+        left,
+        maxWidth,
+        top: Math.max(y + OVERLAY_LAYOUT.windowTagTopOffset, OVERLAY_LAYOUT.windowTagTopOffset),
       }}
     >
-      {win.appName}
-      {win.title ? ` - ${win.title}` : ''}
+      <span className={styles.windowTagApp}>{win.appName}</span>
+      {win.title && <span className={styles.windowTagDivider}>•</span>}
+      {win.title && <span className={styles.windowTagTitle}>{win.title}</span>}
     </div>
   );
 });

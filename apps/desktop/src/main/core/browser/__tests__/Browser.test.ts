@@ -4,8 +4,15 @@ import { type App as AppCore } from '../../App';
 import Browser, { type BrowserWindowOpts } from '../Browser';
 
 // Use vi.hoisted to define mocks before hoisting
-const { mockBrowserWindow, mockNativeTheme, mockIpcMain, mockScreen, MockBrowserWindow } =
-  vi.hoisted(() => {
+const {
+  mockAppModule,
+  mockBrowserWindow,
+  mockNativeTheme,
+  mockIpcMain,
+  mockScreen,
+  MockBrowserWindow,
+  mockEnv,
+} = vi.hoisted(() => {
     const mockBrowserWindow = {
       center: vi.fn(),
       close: vi.fn(),
@@ -46,8 +53,21 @@ const { mockBrowserWindow, mockNativeTheme, mockIpcMain, mockScreen, MockBrowser
     };
 
     return {
+      mockAppModule: {
+        dock: {
+          show: vi.fn(),
+        },
+        setActivationPolicy: vi.fn(),
+      },
       MockBrowserWindow: vi.fn().mockImplementation(() => mockBrowserWindow),
       mockBrowserWindow,
+      mockEnv: {
+        isDev: false,
+        isLinux: false,
+        isMac: false,
+        isMacTahoe: false,
+        isWindows: true,
+      },
       mockIpcMain: {
         handle: vi.fn(),
         removeHandler: vi.fn(),
@@ -74,6 +94,7 @@ const { mockBrowserWindow, mockNativeTheme, mockIpcMain, mockScreen, MockBrowser
 
 // Mock electron
 vi.mock('electron', () => ({
+  app: mockAppModule,
   BrowserWindow: MockBrowserWindow,
   ipcMain: mockIpcMain,
   nativeTheme: mockNativeTheme,
@@ -98,11 +119,21 @@ vi.mock('@/const/dir', () => ({
 }));
 
 vi.mock('@/const/env', () => ({
-  isDev: false,
-  isLinux: false,
-  isMac: false,
-  isMacTahoe: false,
-  isWindows: true,
+  get isDev() {
+    return mockEnv.isDev;
+  },
+  get isLinux() {
+    return mockEnv.isLinux;
+  },
+  get isMac() {
+    return mockEnv.isMac;
+  },
+  get isMacTahoe() {
+    return mockEnv.isMacTahoe;
+  },
+  get isWindows() {
+    return mockEnv.isWindows;
+  },
 }));
 
 vi.mock('../../../const/theme', () => ({
@@ -145,6 +176,10 @@ describe('Browser', () => {
     mockBrowserWindow.loadURL.mockResolvedValue(undefined);
     mockBrowserWindow.loadFile.mockResolvedValue(undefined);
     mockNativeTheme.shouldUseDarkColors = false;
+    mockEnv.isLinux = false;
+    mockEnv.isMac = false;
+    mockEnv.isMacTahoe = false;
+    mockEnv.isWindows = true;
 
     // Create mock App
     mockStoreManagerGet = vi.fn().mockReturnValue(undefined);
@@ -468,6 +503,19 @@ describe('Browser', () => {
         browser.show();
 
         expect(mockBrowserWindow.show).toHaveBeenCalled();
+      });
+
+      it('should restore regular activation policy when showing the main window on macOS', () => {
+        mockEnv.isMac = true;
+        mockEnv.isWindows = false;
+
+        const mainBrowser = new Browser({ ...defaultOptions, identifier: 'app' }, mockApp);
+        vi.spyOn(mainBrowser, 'loadUrl').mockResolvedValue(undefined as any);
+
+        mainBrowser.show();
+
+        expect(mockAppModule.setActivationPolicy).toHaveBeenCalledWith('regular');
+        expect(mockAppModule.dock.show).toHaveBeenCalled();
       });
     });
 

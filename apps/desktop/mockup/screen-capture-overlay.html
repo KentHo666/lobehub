@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Screenshot-to-Prompt · Overlay Mockup</title>
+    <style>
+      /* ---------- tokens ---------- */
+      :root {
+        --font-display: 'SF Pro Display', 'Segoe UI Variable Display', ui-sans-serif, system-ui;
+        --font-body: 'SF Pro Text', 'Segoe UI Variable Text', ui-sans-serif, system-ui;
+        --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+        --accent: #6fa5ff;
+        --accent-strong: #4a7dff;
+        --accent-soft: rgba(111, 165, 255, 0.14);
+
+        --overlay-scrim: rgba(4, 9, 20, 0.42);
+        --highlight-border: rgba(241, 246, 255, 0.98);
+        --selection-border: rgba(255, 255, 255, 0.94);
+
+        --panel-bg: rgba(252, 253, 255, 0.94);
+        --panel-border: rgba(18, 24, 38, 0.08);
+        --panel-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.6) inset,
+          0 24px 60px rgba(3, 8, 18, 0.36),
+          0 4px 14px rgba(3, 8, 18, 0.18),
+          0 0 0 1px rgba(18, 24, 38, 0.06);
+
+        --ink: #0c1322;
+        --ink-muted: #5a6478;
+        --ink-faint: #8a93a3;
+        --hair: rgba(18, 24, 38, 0.08);
+        --chip-bg: rgba(18, 24, 38, 0.04);
+
+        --radius-panel: 18px;
+        --radius-chip: 10px;
+        --radius-pill: 999px;
+
+        --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-exit: cubic-bezier(0.4, 0, 0.2, 1);
+        --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; overflow: hidden; }
+      body {
+        font-family: var(--font-body);
+        color: var(--ink);
+        background: #0a0f1a;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+
+      /* ---------- mock desktop behind overlay ---------- */
+      .desktop {
+        position: fixed; inset: 0;
+        background:
+          radial-gradient(1200px 700px at 70% 20%, #2c3d66 0%, transparent 60%),
+          radial-gradient(900px 600px at 20% 80%, #3b2a55 0%, transparent 55%),
+          linear-gradient(160deg, #0d1425 0%, #0a0f1a 100%);
+      }
+      .desktop::after {
+        content: '';
+        position: absolute; inset: 0;
+        background-image:
+          radial-gradient(rgba(255,255,255,0.018) 1px, transparent 1px);
+        background-size: 3px 3px;
+        pointer-events: none;
+      }
+      .mock-win {
+        position: absolute;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255,255,255,0.06);
+        box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+        overflow: hidden;
+      }
+      .mock-win .titlebar {
+        height: 28px;
+        display: flex; align-items: center; gap: 6px;
+        padding: 0 12px;
+        background: rgba(255,255,255,0.04);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+      }
+      .mock-win .dot { width: 10px; height: 10px; border-radius: 50%; }
+      .mock-win .dot.r { background: #ff5f57; }
+      .mock-win .dot.y { background: #febc2e; }
+      .mock-win .dot.g { background: #28c840; }
+      .mock-win .content {
+        height: calc(100% - 28px);
+        padding: 14px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: rgba(255,255,255,0.35);
+        line-height: 1.7;
+        overflow: hidden;
+      }
+      .mock-win .content .kw { color: #ff7ab6; }
+      .mock-win .content .fn { color: #a5d6ff; }
+      .mock-win .content .str { color: #ffd485; }
+
+      #win-editor { left: 6%; top: 10%; width: 44%; height: 60%; }
+      #win-browser { right: 5%; top: 16%; width: 42%; height: 54%; }
+      #win-browser .content {
+        font-family: var(--font-body);
+        font-size: 13px;
+        color: rgba(255,255,255,0.55);
+      }
+      #win-browser .content h3 { margin: 0 0 10px; font-size: 18px; color: rgba(255,255,255,0.9); }
+      #win-browser .content .card {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+      }
+
+      /* ---------- scrim ---------- */
+      .scrim {
+        position: fixed; inset: 0;
+        background:
+          radial-gradient(circle at 50% 0%, rgba(95, 144, 255, 0.10), transparent 38%),
+          var(--overlay-scrim);
+        backdrop-filter: blur(1.5px);
+        box-shadow:
+          inset 0 0 0 1px rgba(255,255,255,0.05),
+          inset 0 -120px 220px rgba(2, 6, 16, 0.38);
+      }
+
+      /* ---------- selection ---------- */
+      .selection {
+        position: fixed;
+        border: 1.5px solid var(--selection-border);
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(111,165,255,0.18), rgba(111,165,255,0.10));
+        box-shadow:
+          0 0 0 1px rgba(111,165,255,0.34),
+          0 0 0 8px rgba(111,165,255,0.08),
+          0 20px 48px rgba(3,8,18,0.42);
+        transition:
+          left 380ms var(--ease-spring),
+          top 380ms var(--ease-spring),
+          width 380ms var(--ease-spring),
+          height 380ms var(--ease-spring),
+          opacity 260ms var(--ease-exit);
+        pointer-events: none;
+      }
+      .selection::after {
+        content: '';
+        position: absolute; inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+        pointer-events: none;
+      }
+      .selection.hidden { opacity: 0; transform: scale(0.98); }
+
+      /* corner handles */
+      .selection .handle {
+        position: absolute;
+        width: 10px; height: 10px;
+        background: #fff;
+        border: 1px solid rgba(18,24,38,0.2);
+        border-radius: 2px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      }
+      .selection .handle.tl { top: -6px; left: -6px; }
+      .selection .handle.tr { top: -6px; right: -6px; }
+      .selection .handle.bl { bottom: -6px; left: -6px; }
+      .selection .handle.br { bottom: -6px; right: -6px; }
+
+      /* selection size tag */
+      .selection .size-tag {
+        position: absolute;
+        top: -30px; left: 0;
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: #fff;
+        background: rgba(12,17,28,0.84);
+        border: 1px solid rgba(255,255,255,0.16);
+        border-radius: 6px;
+        padding: 3px 8px;
+        backdrop-filter: blur(10px);
+        letter-spacing: 0.02em;
+      }
+
+      /* connector dot between selection and panel */
+      .connector {
+        position: fixed;
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 4px rgba(111,165,255,0.22), 0 0 20px rgba(111,165,255,0.7);
+        opacity: 0;
+        transition: opacity 240ms var(--ease-enter) 180ms,
+          left 380ms var(--ease-spring), top 380ms var(--ease-spring);
+        pointer-events: none;
+      }
+      body.state-selected .connector { opacity: 1; }
+
+      /* ---------- chat panel ---------- */
+      .panel {
+        position: fixed;
+        width: 560px;
+        background: var(--panel-bg);
+        backdrop-filter: blur(28px) saturate(160%);
+        border: 1px solid var(--panel-border);
+        border-radius: var(--radius-panel);
+        box-shadow: var(--panel-shadow);
+        transition:
+          left 420ms var(--ease-spring),
+          top 420ms var(--ease-spring),
+          transform 420ms var(--ease-spring),
+          width 360ms var(--ease-enter),
+          box-shadow 300ms var(--ease-enter);
+        z-index: 20;
+        overflow: hidden;
+      }
+      .panel.initial {
+        left: 50%; bottom: 48px; top: auto;
+        transform: translateX(-50%);
+        width: 620px;
+      }
+
+      .panel .header {
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+        transition:
+          max-height 320ms var(--ease-enter) 140ms,
+          opacity 220ms var(--ease-enter) 200ms;
+      }
+      body.state-selected .panel .header {
+        max-height: 84px;
+        opacity: 1;
+      }
+
+      .attach-strip {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px 8px;
+        border-bottom: 1px solid var(--hair);
+      }
+      .thumb {
+        position: relative;
+        width: 64px; height: 44px;
+        border-radius: 8px;
+        border: 1px solid var(--hair);
+        background:
+          linear-gradient(135deg, #6fa5ff 0%, #a97fff 100%);
+        flex-shrink: 0;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(3,8,18,0.12);
+      }
+      .thumb::after {
+        content: '';
+        position: absolute; inset: 0;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.3), transparent 50%),
+          repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 4px, transparent 4px 8px);
+      }
+      .thumb-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+      .thumb-name {
+        font-size: 12.5px;
+        font-weight: 560;
+        color: var(--ink);
+        letter-spacing: -0.005em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .thumb-size {
+        font-size: 11px;
+        color: var(--ink-faint);
+        font-family: var(--font-mono);
+        letter-spacing: 0.01em;
+      }
+      .retake-btn {
+        display: inline-flex; align-items: center; gap: 5px;
+        height: 26px; padding: 0 10px;
+        background: var(--chip-bg);
+        border: 1px solid var(--hair);
+        border-radius: var(--radius-pill);
+        font-size: 11.5px;
+        font-weight: 540;
+        color: var(--ink);
+        cursor: pointer;
+        transition: background 120ms ease, transform 160ms var(--ease-spring);
+      }
+      .retake-btn:hover { background: rgba(18,24,38,0.07); }
+      .retake-btn:active { transform: scale(0.97); }
+      .icon-btn {
+        width: 26px; height: 26px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: none; background: transparent;
+        border-radius: 6px;
+        color: var(--ink-muted); cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .icon-btn:hover { background: var(--chip-bg); color: var(--ink); }
+
+      /* input body */
+      .body {
+        padding: 14px 14px 8px;
+      }
+      .textarea {
+        min-height: 48px;
+        max-height: 200px;
+        font-family: var(--font-body);
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--ink);
+        letter-spacing: -0.005em;
+        caret-color: var(--accent-strong);
+      }
+      .textarea:empty::before {
+        content: attr(data-placeholder);
+        color: var(--ink-faint);
+      }
+      .textarea[contenteditable]:focus { outline: none; }
+
+      /* bottom toolbar */
+      .toolbar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 6px 10px 10px;
+        gap: 8px;
+      }
+      .toolbar .left, .toolbar .right {
+        display: flex; align-items: center; gap: 4px;
+      }
+      .model-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        height: 28px; padding: 0 10px 0 8px;
+        background: var(--chip-bg);
+        border: 1px solid var(--hair);
+        border-radius: var(--radius-chip);
+        font-size: 12px;
+        font-weight: 540;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .model-chip .avatar {
+        width: 16px; height: 16px; border-radius: 50%;
+        background: linear-gradient(135deg, #ffb86b, #ff6ec7);
+      }
+      .send-btn {
+        width: 30px; height: 30px;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        border: none; border-radius: 9px;
+        color: #fff; cursor: pointer;
+        box-shadow:
+          0 1px 0 rgba(255,255,255,0.35) inset,
+          0 0 0 1px rgba(74,125,255,0.4),
+          0 6px 14px rgba(74,125,255,0.35);
+        transition: transform 140ms var(--ease-spring), box-shadow 200ms ease;
+      }
+      .send-btn:hover { transform: translateY(-1px); }
+      .send-btn:active { transform: scale(0.94); }
+
+      /* footnote / kbd hint strip */
+      .kbd-hint {
+        display: flex; align-items: center; justify-content: center; gap: 16px;
+        padding: 6px 0 10px;
+        font-size: 10.5px;
+        color: var(--ink-faint);
+        border-top: 1px solid var(--hair);
+        background: rgba(18,24,38,0.02);
+      }
+      .kbd-hint .kbd {
+        display: inline-flex; align-items: center;
+        height: 16px; padding: 0 5px;
+        font-family: var(--font-mono);
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--ink-muted);
+        background: #fff;
+        border: 1px solid var(--hair);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        letter-spacing: 0.03em;
+        margin-right: 4px;
+      }
+
+      /* placeholder mode (Selecting) */
+      body.state-selecting .panel .body {
+        padding: 16px 16px 10px;
+      }
+      body.state-selecting .panel .textarea::before {
+        content: 'Select a window or drag a region to start asking…';
+        color: var(--ink-faint);
+      }
+      body.state-selected .panel .textarea::before {
+        content: 'Ask about this screenshot…';
+        color: var(--ink-faint);
+      }
+
+      /* hover highlight (on mock window) */
+      .hover-highlight {
+        position: fixed;
+        border: 1.5px solid var(--highlight-border);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(126,174,255,0.2), rgba(126,174,255,0.14));
+        box-shadow:
+          0 0 0 1px rgba(111,165,255,0.34),
+          0 18px 48px rgba(3,8,18,0.42),
+          0 0 0 8px rgba(111,165,255,0.08);
+        opacity: 0;
+        transition: opacity 200ms var(--ease-enter);
+        pointer-events: none;
+      }
+      body.state-hover .hover-highlight { opacity: 1; }
+
+      .window-tag {
+        position: fixed;
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 6px 12px;
+        min-height: 32px;
+        background: linear-gradient(180deg, rgba(22,28,41,0.92), rgba(12,17,28,0.84));
+        border: 1px solid rgba(255,255,255,0.16);
+        border-radius: 999px;
+        backdrop-filter: blur(18px) saturate(135%);
+        box-shadow: 0 14px 30px rgba(0,0,0,0.3);
+        font-size: 12px;
+        color: rgba(250,252,255,0.96);
+        opacity: 0;
+        transition: opacity 200ms var(--ease-enter);
+        pointer-events: none;
+      }
+      .window-tag .app { font-weight: 650; }
+      .window-tag .divider { color: rgba(255,255,255,0.45); font-size: 10px; }
+      .window-tag .title { color: rgba(224,231,241,0.74); font-weight: 500; }
+      body.state-hover .window-tag { opacity: 1; }
+
+      /* ---------- dev toolbox (reviewer controls) ---------- */
+      .toolbox {
+        position: fixed;
+        top: 20px; right: 20px;
+        z-index: 100;
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 14px;
+        background: rgba(12,17,28,0.78);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        backdrop-filter: blur(20px) saturate(140%);
+        color: rgba(250,252,255,0.92);
+        font-size: 12px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+        min-width: 240px;
+      }
+      .toolbox h4 {
+        margin: 0 0 4px;
+        font-family: var(--font-display);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.5);
+      }
+      .toolbox .row { display: flex; gap: 6px; flex-wrap: wrap; }
+      .toolbox button {
+        flex: 1;
+        padding: 6px 10px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        color: rgba(255,255,255,0.9);
+        font-size: 11.5px;
+        font-weight: 540;
+        cursor: pointer;
+        font-family: var(--font-body);
+        transition: background 120ms ease;
+      }
+      .toolbox button:hover { background: rgba(255,255,255,0.12); }
+      .toolbox button.active {
+        background: var(--accent-soft);
+        border-color: rgba(111,165,255,0.5);
+        color: #eaf2ff;
+        box-shadow: 0 0 0 1px rgba(111,165,255,0.2) inset;
+      }
+      .toolbox .hint {
+        font-size: 10.5px;
+        color: rgba(255,255,255,0.55);
+        line-height: 1.5;
+        font-family: var(--font-mono);
+      }
+      .toolbox kbd {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        padding: 1px 5px;
+        background: rgba(255,255,255,0.12);
+        border-radius: 3px;
+        border: 1px solid rgba(255,255,255,0.15);
+      }
+
+      /* legend footer */
+      .legend {
+        position: fixed;
+        left: 20px; bottom: 20px;
+        z-index: 100;
+        display: flex; gap: 14px;
+        padding: 10px 14px;
+        background: rgba(12,17,28,0.72);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        backdrop-filter: blur(16px);
+        font-size: 11px;
+        color: rgba(255,255,255,0.75);
+        font-family: var(--font-mono);
+        letter-spacing: 0.02em;
+      }
+      .legend .state {
+        display: inline-flex; align-items: center; gap: 6px;
+      }
+      .legend .dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: rgba(255,255,255,0.3);
+      }
+      .legend .state.on .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+      .legend .state.on { color: #fff; }
+    </style>
+  </head>
+  <body class="state-selecting">
+    <!-- mock desktop -->
+    <div class="desktop" aria-hidden="true">
+      <div class="mock-win" id="win-editor">
+        <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+        <div class="content">
+          <div><span class="kw">import</span> { useState } <span class="kw">from</span> <span class="str">'react'</span>;</div>
+          <div>&nbsp;</div>
+          <div><span class="kw">export</span> <span class="kw">function</span> <span class="fn">ScreenCaptureOverlay</span>() {</div>
+          <div>&nbsp;&nbsp;<span class="kw">const</span> [session, setSession] = <span class="fn">useState</span>(<span class="kw">null</span>);</div>
+          <div>&nbsp;&nbsp;<span class="kw">return</span> &lt;<span class="fn">div</span> className=<span class="str">"overlay"</span> /&gt;;</div>
+          <div>}</div>
+        </div>
+      </div>
+      <div class="mock-win" id="win-browser">
+        <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+        <div class="content">
+          <h3>LobeHub · Dashboard</h3>
+          <div class="card">Active Agents · 12</div>
+          <div class="card">Conversations this week · 284</div>
+          <div class="card">Token usage · 4.2M</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- dim scrim -->
+    <div class="scrim"></div>
+
+    <!-- hover highlight (for state-hover demo) -->
+    <div class="hover-highlight" id="hover-highlight" style="left: 56%; top: 16%; width: 39%; height: 54%;"></div>
+    <div class="window-tag" id="window-tag" style="left: 56%; top: calc(16% - 40px);">
+      <span class="app">LobeHub</span>
+      <span class="divider">·</span>
+      <span class="title">Dashboard — app.lobehub.com</span>
+    </div>
+
+    <!-- current selection -->
+    <div class="selection hidden" id="selection">
+      <div class="handle tl"></div>
+      <div class="handle tr"></div>
+      <div class="handle bl"></div>
+      <div class="handle br"></div>
+      <div class="size-tag" id="size-tag">0 × 0</div>
+    </div>
+
+    <!-- connector pip -->
+    <div class="connector" id="connector"></div>
+
+    <!-- chat panel -->
+    <div class="panel initial" id="panel">
+      <div class="header">
+        <div class="attach-strip">
+          <div class="thumb" aria-label="screenshot thumbnail"></div>
+          <div class="thumb-meta">
+            <div class="thumb-name">Screenshot — <span id="thumb-region">Browser window</span></div>
+            <div class="thumb-size" id="thumb-size">1 280 × 720 · PNG</div>
+          </div>
+          <button class="retake-btn" id="retake-btn" title="Retake selection (R)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" />
+            </svg>
+            Retake
+          </button>
+          <button class="icon-btn" title="Remove attachment">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="body">
+        <div class="textarea" contenteditable="true" spellcheck="false" data-placeholder=""></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="left">
+          <button class="icon-btn" title="Attach file">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.48-8.49l9.18-9.18a4 4 0 1 1 5.66 5.65l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+          <button class="icon-btn" title="Mention context">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+            </svg>
+          </button>
+          <button class="model-chip" title="Choose model">
+            <span class="avatar"></span>
+            <span>Claude Opus 4.6</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </div>
+        <div class="right">
+          <button class="icon-btn" title="Voice">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3" /><path d="M19 10a7 7 0 0 1-14 0" /><path d="M12 19v3" />
+            </svg>
+          </button>
+          <button class="send-btn" title="Send (⏎)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19V5" /><path d="m5 12 7-7 7 7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="kbd-hint">
+        <span><span class="kbd">↵</span>Send</span>
+        <span><span class="kbd">R</span>Retake</span>
+        <span><span class="kbd">Esc</span>Clear → Close</span>
+      </div>
+    </div>
+
+    <!-- reviewer toolbox -->
+    <div class="toolbox">
+      <h4>State</h4>
+      <div class="row">
+        <button data-state="selecting" class="active">Selecting</button>
+        <button data-state="hover">Hover-Window</button>
+      </div>
+      <h4>Selected (position strategy)</h4>
+      <div class="row">
+        <button data-sel="right">Right</button>
+        <button data-sel="below">Below</button>
+        <button data-sel="left">Left</button>
+        <button data-sel="above">Above</button>
+      </div>
+      <div class="row">
+        <button data-sel="small">Small region</button>
+        <button data-sel="edge">Edge-clamp</button>
+      </div>
+      <h4>Keys</h4>
+      <div class="hint">
+        Drag on scrim → simulate selection.<br/>
+        <kbd>R</kbd> Retake · <kbd>Esc</kbd> two-stage close
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="state on" data-legend="selecting"><span class="dot"></span>Selecting</span>
+      <span class="state" data-legend="selected"><span class="dot"></span>Selected</span>
+      <span class="state" data-legend="retake"><span class="dot"></span>Retake</span>
+      <span class="state" data-legend="esc1"><span class="dot"></span>Esc·1st → Clear</span>
+      <span class="state" data-legend="esc2"><span class="dot"></span>Esc·2nd → Close</span>
+    </div>
+
+    <script>
+      const body = document.body;
+      const panel = document.getElementById('panel');
+      const selection = document.getElementById('selection');
+      const connector = document.getElementById('connector');
+      const sizeTag = document.getElementById('size-tag');
+      const thumbRegion = document.getElementById('thumb-region');
+      const thumbSize = document.getElementById('thumb-size');
+
+      const GAP = 16;
+      const PANEL_W = 460; // shrinks in docked mode
+      const PANEL_H_GUESS = 188;
+
+      function setState(state) {
+        body.classList.remove('state-selecting', 'state-hover', 'state-selected');
+        body.classList.add('state-' + state);
+        document.querySelectorAll('.toolbox [data-state]').forEach(b => {
+          b.classList.toggle('active', b.dataset.state === state);
+        });
+        updateLegend(state);
+        if (state !== 'selected') {
+          selection.classList.add('hidden');
+          panel.classList.add('initial');
+          panel.style.left = '';
+          panel.style.top = '';
+          panel.style.width = '';
+          panel.style.transform = '';
+        }
+      }
+
+      function updateLegend(key) {
+        document.querySelectorAll('.legend .state').forEach(el => {
+          el.classList.toggle('on', el.dataset.legend === key);
+        });
+      }
+
+      // compute panel position via strategy: right > below > left > above > edge-clamp
+      function dockPanelToRect(rect) {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        panel.classList.remove('initial');
+        panel.style.width = PANEL_W + 'px';
+        panel.style.transform = 'none';
+
+        const tryRight = rect.x + rect.width + GAP + PANEL_W <= vw;
+        const tryBelow = rect.y + rect.height + GAP + PANEL_H_GUESS <= vh;
+        const tryLeft = rect.x - GAP - PANEL_W >= 0;
+        const tryAbove = rect.y - GAP - PANEL_H_GUESS >= 0;
+
+        let left, top, side;
+        if (tryRight) {
+          side = 'right';
+          left = rect.x + rect.width + GAP;
+          top = clamp(rect.y + rect.height / 2 - PANEL_H_GUESS / 2, 16, vh - PANEL_H_GUESS - 16);
+        } else if (tryBelow) {
+          side = 'below';
+          left = clamp(rect.x + rect.width / 2 - PANEL_W / 2, 16, vw - PANEL_W - 16);
+          top = rect.y + rect.height + GAP;
+        } else if (tryLeft) {
+          side = 'left';
+          left = rect.x - GAP - PANEL_W;
+          top = clamp(rect.y + rect.height / 2 - PANEL_H_GUESS / 2, 16, vh - PANEL_H_GUESS - 16);
+        } else if (tryAbove) {
+          side = 'above';
+          left = clamp(rect.x + rect.width / 2 - PANEL_W / 2, 16, vw - PANEL_W - 16);
+          top = rect.y - GAP - PANEL_H_GUESS;
+        } else {
+          side = 'edge';
+          left = clamp(rect.x + rect.width + GAP, 16, vw - PANEL_W - 16);
+          top = clamp(rect.y + rect.height - PANEL_H_GUESS, 16, vh - PANEL_H_GUESS - 16);
+        }
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
+
+        // connector sits on the edge closest to the panel
+        const cx = side === 'right' ? rect.x + rect.width
+                 : side === 'left'  ? rect.x
+                 : rect.x + rect.width / 2;
+        const cy = side === 'below' ? rect.y + rect.height
+                 : side === 'above' ? rect.y
+                 : rect.y + rect.height / 2;
+        connector.style.left = (cx - 4) + 'px';
+        connector.style.top  = (cy - 4) + 'px';
+
+        return side;
+      }
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+      function showSelection(rect) {
+        selection.classList.remove('hidden');
+        selection.style.left = rect.x + 'px';
+        selection.style.top = rect.y + 'px';
+        selection.style.width = rect.width + 'px';
+        selection.style.height = rect.height + 'px';
+        sizeTag.textContent = Math.round(rect.width) + ' × ' + Math.round(rect.height);
+        thumbSize.textContent = Math.round(rect.width) + ' × ' + Math.round(rect.height) + ' · PNG';
+      }
+
+      function select(rect, label = 'Region') {
+        thumbRegion.textContent = label;
+        setState('selected');
+        showSelection(rect);
+        requestAnimationFrame(() => dockPanelToRect(rect));
+      }
+
+      // preset selections
+      const presets = {
+        right: { x: 100, y: 160, width: 520, height: 360, label: 'Code editor' },
+        below: { x: 280, y: 80, width: 760, height: 280, label: 'Toolbar area' },
+        left:  { x: window.innerWidth - 600, y: 180, width: 480, height: 340, label: 'Browser card' },
+        above: { x: 220, y: window.innerHeight - 420, width: 640, height: 300, label: 'Terminal' },
+        small: { x: window.innerWidth/2 - 70, y: window.innerHeight/2 - 50, width: 140, height: 100, label: 'Small region' },
+        edge:  { x: window.innerWidth - 280, y: window.innerHeight - 240, width: 260, height: 220, label: 'Edge region' },
+      };
+
+      // wire toolbox buttons
+      document.querySelectorAll('.toolbox [data-state]').forEach(btn => {
+        btn.addEventListener('click', () => setState(btn.dataset.state));
+      });
+      document.querySelectorAll('.toolbox [data-sel]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const p = presets[btn.dataset.sel];
+          select(p, p.label);
+        });
+      });
+
+      // retake
+      document.getElementById('retake-btn').addEventListener('click', retake);
+
+      function retake() {
+        updateLegend('retake');
+        // elastic: shrink selection out, panel glides back to center
+        selection.classList.add('hidden');
+        panel.classList.add('initial');
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.style.width = '';
+        panel.style.transform = '';
+        setTimeout(() => setState('selecting'), 260);
+      }
+
+      // drag-to-select on scrim
+      const scrim = document.querySelector('.scrim');
+      let drag = null;
+      scrim.addEventListener('mousedown', (e) => {
+        if (body.classList.contains('state-selected')) return;
+        drag = { x: e.clientX, y: e.clientY };
+        showSelection({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!drag) return;
+        const x = Math.min(drag.x, e.clientX);
+        const y = Math.min(drag.y, e.clientY);
+        const w = Math.abs(e.clientX - drag.x);
+        const h = Math.abs(e.clientY - drag.y);
+        selection.classList.remove('hidden');
+        selection.style.transition = 'none';
+        selection.style.left = x + 'px';
+        selection.style.top = y + 'px';
+        selection.style.width = w + 'px';
+        selection.style.height = h + 'px';
+        sizeTag.textContent = Math.round(w) + ' × ' + Math.round(h);
+      });
+      window.addEventListener('mouseup', (e) => {
+        if (!drag) return;
+        const x = Math.min(drag.x, e.clientX);
+        const y = Math.min(drag.y, e.clientY);
+        const w = Math.abs(e.clientX - drag.x);
+        const h = Math.abs(e.clientY - drag.y);
+        drag = null;
+        selection.style.transition = '';
+        if (w < 20 || h < 20) { selection.classList.add('hidden'); return; }
+        select({ x, y, width: w, height: h }, 'Custom region');
+      });
+
+      // Esc two-stage
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (body.classList.contains('state-selected')) {
+            // stage 1: clear selection, panel returns to initial
+            updateLegend('esc1');
+            retake();
+          } else {
+            // stage 2: simulate close with fade
+            updateLegend('esc2');
+            document.body.style.transition = 'opacity 260ms ease';
+            document.body.style.opacity = '0';
+            setTimeout(() => { document.body.style.opacity = '1'; setState('selecting'); }, 500);
+          }
+        }
+        if (e.key.toLowerCase() === 'r' && body.classList.contains('state-selected')) retake();
+      });
+
+      // initial
+      setState('selecting');
+    </script>
+  </body>
+</html>

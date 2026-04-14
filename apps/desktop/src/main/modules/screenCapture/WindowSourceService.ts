@@ -33,7 +33,6 @@ function intersects(a: DisplayBounds, b: DisplayBounds): boolean {
 
 export async function enumerateWindows(
   displayBounds: DisplayBounds,
-  scaleFactor: number,
 ): Promise<ScreenCaptureWindowInfo[]> {
   const selfName = app.getName();
 
@@ -50,46 +49,49 @@ export async function enumerateWindows(
     logger.warn('get-windows unavailable, skipping whitelist filter:', error);
   }
 
-  // node-screenshots returns physical pixel coords; convert displayBounds to physical for intersection
-  const physicalDisplayBounds: DisplayBounds = {
-    height: displayBounds.height * scaleFactor,
-    width: displayBounds.width * scaleFactor,
-    x: displayBounds.x * scaleFactor,
-    y: displayBounds.y * scaleFactor,
-  };
+  const visibleWindows = Window.all()
+    .filter((win) => {
+      const appName = win.appName();
 
-  const allWindows = Window.all();
-  const results: ScreenCaptureWindowInfo[] = [];
+      if (SYSTEM_APP_BLACKLIST.has(appName)) return false;
+      if (appName === selfName) return false;
+      if (win.isMinimized()) return false;
 
-  for (const win of allWindows) {
-    const appName = win.appName();
+      const physWidth = win.width();
+      const physHeight = win.height();
+      if (physWidth < MIN_WIDTH || physHeight < MIN_HEIGHT) return false;
 
-    if (SYSTEM_APP_BLACKLIST.has(appName)) continue;
-    if (appName === selfName) continue;
-    if (win.isMinimized()) continue;
+      const bounds = { height: physHeight, width: physWidth, x: win.x(), y: win.y() };
+      if (!intersects(bounds, displayBounds)) return false;
 
-    const physWidth = win.width();
-    const physHeight = win.height();
-    if (physWidth < MIN_WIDTH || physHeight < MIN_HEIGHT) continue;
+      if (visiblePids && !visiblePids.has(win.pid())) return false;
 
-    const physBounds = { height: physHeight, width: physWidth, x: win.x(), y: win.y() };
-    if (!intersects(physBounds, physicalDisplayBounds)) continue;
+      return true;
+    })
+    .sort((left, right) => right.z() - left.z());
 
-    if (visiblePids && !visiblePids.has(win.pid())) continue;
+  const results = visibleWindows.map((win, index) => {
+    const bounds = {
+      height: win.height(),
+      width: win.width(),
+      x: win.x(),
+      y: win.y(),
+    };
 
-    // Convert physical pixel bounds to DIP for the renderer
-    results.push({
-      appName,
-      bounds: {
-        height: Math.round(physHeight / scaleFactor),
-        width: Math.round(physWidth / scaleFactor),
-        x: Math.round(win.x() / scaleFactor),
-        y: Math.round(win.y() / scaleFactor),
+    return {
+      appName: win.appName(),
+      bounds,
+      order: index,
+      overlayBounds: {
+        height: bounds.height,
+        width: bounds.width,
+        x: bounds.x - displayBounds.x,
+        y: bounds.y - displayBounds.y,
       },
       title: win.title(),
       windowId: win.id(),
-    });
-  }
+    };
+  });
 
   logger.info(`Enumerated ${results.length} windows for display`);
   return results;

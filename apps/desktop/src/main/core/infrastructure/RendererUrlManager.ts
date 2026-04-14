@@ -62,7 +62,9 @@ export class RendererUrlManager {
    */
   buildRendererUrl(path: string): string {
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    return `${this.rendererLoadedUrl}${cleanPath}`;
+    const normalizedBase = this.rendererLoadedUrl.replace(/\/+$/, '');
+
+    return `${normalizedBase}${cleanPath}`;
   }
 
   /**

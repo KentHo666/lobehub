@@ -1,33 +1,39 @@
-import type { ScreenCaptureSession } from '@lobechat/electron-client-ipc';
-import { memo, useCallback, useEffect, useState } from 'react';
+import type {
+  CapturePreviewResult,
+  ScreenCaptureSession,
+} from '@lobechat/electron-client-ipc';
+import type { MouseEvent as ReactMouseEvent } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
+import ChatPanel, { type ChatPanelSelection } from './ChatPanel';
+import { OVERLAY_COPY, OVERLAY_LAYOUT } from './constants';
+import * as styles from './overlay.css.ts';
 import { useDragSelection } from './useDragSelection';
 import { useWindowHighlight } from './useWindowHighlight';
 import WindowTag from './WindowTag';
 
-const HIGHLIGHT_BORDER_WIDTH = 2;
-const HIGHLIGHT_COLOR = 'rgba(24, 144, 255, 0.8)';
-const DRAG_FILL_COLOR = 'rgba(24, 144, 255, 0.15)';
-const DRAG_STROKE_COLOR = 'rgba(24, 144, 255, 0.8)';
-const OVERLAY_BG = 'rgba(0, 0, 0, 0.25)';
-const MIN_DRAG_SIZE = 10;
-
-const invoke = (...args: any[]) => (window as any).electronAPI?.invoke?.(...args);
+const clipLabel = (text: string, max = OVERLAY_LAYOUT.labelClipLength): string =>
+  text.length > max ? `${text.slice(0, max)}…` : text;
 
 const ScreenCaptureOverlay = memo(() => {
   const [session, setSession] = useState<ScreenCaptureSession | null>(null);
+  const [selection, setSelection] = useState<ChatPanelSelection | null>(null);
+  const capturingRef = useRef(false);
+  const pendingWindowRef = useRef<ScreenCaptureSession['windows'][number] | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    const electron = (window as any).electron;
-    if (!electron) return;
-
-    const listener = (_e: any, data: ScreenCaptureSession) => {
+    const unsubscribe = window.electronAPI?.onScreenCaptureSession?.((data) => {
       setSession(data);
-    };
+    });
 
-    electron.ipcRenderer.on('screenCaptureSession', listener);
+    if (!unsubscribe) {
+      console.error('[overlay] screenCapture session bridge missing');
+      return;
+    }
+
     return () => {
-      electron.ipcRenderer.removeListener('screenCaptureSession', listener);
+      unsubscribe();
     };
   }, []);
 
@@ -35,110 +41,243 @@ const ScreenCaptureOverlay = memo(() => {
   const { hoveredWindow, handleMouseMove: hitTest } = useWindowHighlight(windows);
   const { dragRect, isDragging, onMouseDown, onMouseMove, onMouseUp, reset } = useDragSelection();
 
+  const viewportWidth = session?.displayBounds.width ?? window.innerWidth;
+  const viewportHeight = session?.displayBounds.height ?? window.innerHeight;
+
   const handleClose = useCallback(() => {
-    invoke('screenCapture.close');
+    window.electronAPI?.invoke?.('screenCapture.close');
   }, []);
 
+  const handleRetake = useCallback(() => {
+    setSelection(null);
+    reset();
+  }, [reset]);
+
+  const handleSubmit = useCallback(
+    (prompt: string, sel: ChatPanelSelection) => {
+      window.electronAPI?.invoke?.('screenCapture.submit', {
+        dataUrl: sel.dataUrl,
+        prompt,
+        rect: sel.rect,
+      });
+    },
+    [],
+  );
+
+  // Two-stage Esc: clear selection first, then close
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose();
+      if (e.key === 'Escape') {
+        if (selection) {
+          handleRetake();
+        } else {
+          handleClose();
+        }
+        return;
+      }
+      // Retake hotkey when selected
+      if ((e.key === 'r' || e.key === 'R') && selection) {
+        const target = e.target as HTMLElement | null;
+        // Ignore when typing in the textarea
+        if (target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT') return;
+        handleRetake();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleClose]);
+  }, [selection, handleClose, handleRetake]);
+
+  const previewWindow = useCallback(
+    async (win: ScreenCaptureSession['windows'][number]) => {
+      if (capturingRef.current) return;
+      capturingRef.current = true;
+      try {
+        const result = (await window.electronAPI?.invoke?.(
+          'screenCapture.previewWindow',
+          win.windowId,
+        )) as CapturePreviewResult | undefined;
+        if (result?.success && result.dataUrl) {
+          setSelection({
+            dataUrl: result.dataUrl,
+            label: clipLabel(`${win.appName} — ${win.title}`),
+            rect: result.rect ?? {
+              height: win.overlayBounds.height,
+              width: win.overlayBounds.width,
+              x: win.overlayBounds.x,
+              y: win.overlayBounds.y,
+            },
+          });
+        }
+      } finally {
+        capturingRef.current = false;
+      }
+    },
+    [],
+  );
+
+  const previewRect = useCallback(
+    async (overlayLocalRect: { height: number; width: number; x: number; y: number }) => {
+      if (capturingRef.current) return;
+      capturingRef.current = true;
+      try {
+        const result = (await window.electronAPI?.invoke?.(
+          'screenCapture.previewRect',
+          overlayLocalRect,
+        )) as CapturePreviewResult | undefined;
+        if (result?.success && result.dataUrl) {
+          setSelection({
+            dataUrl: result.dataUrl,
+            label: OVERLAY_COPY.customRegionLabel,
+            rect: overlayLocalRect,
+          });
+        }
+      } finally {
+        capturingRef.current = false;
+      }
+    },
+    [],
+  );
 
   const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+    (e: ReactMouseEvent) => {
+      if (selection) return; // locked until retake
       if (e.button === 2) {
         handleClose();
         return;
       }
       if (e.button !== 0) return;
 
+      pointerStartRef.current = { x: e.clientX, y: e.clientY };
+
       if (hoveredWindow) {
-        invoke('screenCapture.captureWindow', hoveredWindow.windowId);
+        pendingWindowRef.current = hoveredWindow;
       } else {
+        pendingWindowRef.current = null;
         onMouseDown(e.clientX, e.clientY);
       }
     },
-    [hoveredWindow, onMouseDown, handleClose],
+    [selection, hoveredWindow, onMouseDown, handleClose],
   );
 
   const handleMouseMoveEvent = useCallback(
-    (e: React.MouseEvent) => {
+    (e: ReactMouseEvent) => {
+      if (selection) return;
+      const pointerStart = pointerStartRef.current;
+
+      if (pointerStart && pendingWindowRef.current && !isDragging) {
+        const deltaX = Math.abs(e.clientX - pointerStart.x);
+        const deltaY = Math.abs(e.clientY - pointerStart.y);
+
+        if (
+          deltaX >= OVERLAY_LAYOUT.clickToDragThreshold ||
+          deltaY >= OVERLAY_LAYOUT.clickToDragThreshold
+        ) {
+          pendingWindowRef.current = null;
+          onMouseDown(pointerStart.x, pointerStart.y);
+          onMouseMove(e.clientX, e.clientY);
+          return;
+        }
+      }
+
       if (isDragging) {
         onMouseMove(e.clientX, e.clientY);
       } else {
         hitTest(e.clientX, e.clientY);
       }
     },
-    [isDragging, onMouseMove, hitTest],
+    [selection, isDragging, onMouseDown, onMouseMove, hitTest],
   );
 
   const handleMouseUp = useCallback(() => {
+    if (selection) return;
+
+    const pendingWindow = pendingWindowRef.current;
+    pendingWindowRef.current = null;
+    pointerStartRef.current = null;
+
+    if (pendingWindow && !isDragging) {
+      void previewWindow(pendingWindow);
+      return;
+    }
+
     if (isDragging && dragRect) {
-      if (dragRect.width >= MIN_DRAG_SIZE && dragRect.height >= MIN_DRAG_SIZE) {
-        invoke('screenCapture.captureRect', {
-          height: dragRect.height,
-          width: dragRect.width,
-          x: dragRect.x + (session?.displayBounds.x ?? 0),
-          y: dragRect.y + (session?.displayBounds.y ?? 0),
-        });
+      if (
+        dragRect.width >= OVERLAY_LAYOUT.minDragSize &&
+        dragRect.height >= OVERLAY_LAYOUT.minDragSize
+      ) {
+        void previewRect(dragRect);
       }
       reset();
     }
     onMouseUp();
-  }, [isDragging, dragRect, session, reset, onMouseUp]);
+  }, [selection, isDragging, dragRect, reset, onMouseUp, previewWindow, previewRect]);
+
+  const showHover = hoveredWindow && !isDragging && !selection;
+  const showDrag = isDragging && dragRect && !selection;
 
   return (
     <div
+      className={styles.overlay}
       style={{
-        background: OVERLAY_BG,
-        cursor: isDragging ? 'crosshair' : hoveredWindow ? 'pointer' : 'crosshair',
-        height: '100vh',
-        left: 0,
-        position: 'fixed',
-        top: 0,
-        userSelect: 'none',
-        width: '100vw',
+        cursor: selection
+          ? 'default'
+          : isDragging
+            ? 'crosshair'
+            : hoveredWindow
+              ? 'pointer'
+              : 'crosshair',
       }}
       onContextMenu={(e) => e.preventDefault()}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMoveEvent}
       onMouseUp={handleMouseUp}
     >
-      {hoveredWindow && !isDragging && (
+      {showHover && (
         <>
           <div
+            className={styles.windowHighlight}
             style={{
-              border: `${HIGHLIGHT_BORDER_WIDTH}px solid ${HIGHLIGHT_COLOR}`,
-              borderRadius: 4,
-              height: hoveredWindow.bounds.height,
-              left: hoveredWindow.bounds.x,
-              pointerEvents: 'none',
-              position: 'absolute',
-              top: hoveredWindow.bounds.y,
-              width: hoveredWindow.bounds.width,
+              height: hoveredWindow.overlayBounds.height,
+              left: hoveredWindow.overlayBounds.x,
+              top: hoveredWindow.overlayBounds.y,
+              width: hoveredWindow.overlayBounds.width,
             }}
           />
-          <WindowTag window={hoveredWindow} />
+          <WindowTag viewportWidth={viewportWidth} window={hoveredWindow} />
         </>
       )}
 
-      {isDragging && dragRect && (
+      {showDrag && dragRect && (
         <div
+          className={styles.selection}
           style={{
-            background: DRAG_FILL_COLOR,
-            border: `${HIGHLIGHT_BORDER_WIDTH}px solid ${DRAG_STROKE_COLOR}`,
             height: dragRect.height,
             left: dragRect.x,
-            pointerEvents: 'none',
-            position: 'absolute',
             top: dragRect.y,
             width: dragRect.width,
           }}
         />
       )}
+
+      {selection && (
+        <div
+          className={styles.selection}
+          style={{
+            height: selection.rect.height,
+            left: selection.rect.x,
+            top: selection.rect.y,
+            width: selection.rect.width,
+          }}
+        />
+      )}
+
+      <ChatPanel
+        selection={selection}
+        viewportHeight={viewportHeight}
+        viewportWidth={viewportWidth}
+        onRetake={handleRetake}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 });

@@ -1,4 +1,9 @@
-import type { CaptureRectParams, ScreenCaptureSession } from '@lobechat/electron-client-ipc';
+import type {
+  CapturePreviewResult,
+  CaptureRectParams,
+  ScreenCaptureSession,
+  ScreenCaptureSubmitParams,
+} from '@lobechat/electron-client-ipc';
 import { BrowserWindow, screen } from 'electron';
 
 import { preloadDir } from '@/const/dir';
@@ -10,6 +15,8 @@ import { captureRect, captureWindow } from './CaptureService';
 import { enumerateWindows } from './WindowSourceService';
 
 const logger = createLogger('screenCapture:ScreenCaptureManager');
+
+const HIDE_SETTLE_MS = 40;
 
 export class ScreenCaptureManager {
   private overlayWindow: BrowserWindow | null = null;
@@ -35,7 +42,7 @@ export class ScreenCaptureManager {
       `Starting capture session on display ${display.id} (${bounds.width}x${bounds.height} @${scaleFactor}x)`,
     );
 
-    const windows = await enumerateWindows(bounds, scaleFactor);
+    const windows = await enumerateWindows(bounds);
 
     this.session = {
       displayBounds: bounds,
@@ -46,29 +53,69 @@ export class ScreenCaptureManager {
     await this.createOverlayWindow(bounds);
   }
 
-  async handleCaptureWindow(windowId: number): Promise<boolean> {
-    logger.info(`Capturing window ${windowId}`);
-    this.hideOverlay();
+  async handlePreviewWindow(windowId: number): Promise<CapturePreviewResult> {
+    if (!this.session) {
+      return { error: 'no active session', success: false };
+    }
 
-    // Brief delay to let the overlay disappear
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    const winInfo = this.session.windows.find((w) => w.windowId === windowId);
+    if (!winInfo) {
+      return { error: `window ${windowId} not found`, success: false };
+    }
 
-    const result = await captureWindow(windowId);
-    this.close();
-    return result;
+    logger.info(`Previewing window ${windowId} (${winInfo.appName})`);
+    const pngBuffer = await this.withOverlayHidden(() => captureWindow(windowId));
+    if (!pngBuffer) return { error: 'capture failed', success: false };
+
+    return {
+      dataUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`,
+      rect: {
+        height: winInfo.overlayBounds.height,
+        width: winInfo.overlayBounds.width,
+        x: winInfo.overlayBounds.x,
+        y: winInfo.overlayBounds.y,
+      },
+      success: true,
+    };
   }
 
-  async handleCaptureRect(params: CaptureRectParams): Promise<boolean> {
-    if (!this.session) return false;
+  /**
+   * Preview a rect from the overlay. `params` is in overlay-local DIP
+   * (relative to the current display); main translates to absolute before
+   * handing to the capture pipeline.
+   */
+  async handlePreviewRect(params: CaptureRectParams): Promise<CapturePreviewResult> {
+    if (!this.session) {
+      return { error: 'no active session', success: false };
+    }
 
-    logger.info(`Capturing rect (${params.x},${params.y} ${params.width}x${params.height})`);
-    this.hideOverlay();
+    const { displayBounds, scaleFactor } = this.session;
+    const absolute = {
+      height: params.height,
+      width: params.width,
+      x: params.x + displayBounds.x,
+      y: params.y + displayBounds.y,
+    };
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    logger.info(
+      `Previewing rect (${params.x},${params.y} ${params.width}x${params.height})`,
+    );
+    const pngBuffer = await this.withOverlayHidden(() => captureRect(absolute, scaleFactor));
+    if (!pngBuffer) return { error: 'capture failed', success: false };
 
-    const result = await captureRect(params, this.session.scaleFactor);
+    return {
+      dataUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`,
+      rect: params,
+      success: true,
+    };
+  }
+
+  async handleSubmit(params: ScreenCaptureSubmitParams): Promise<void> {
+    logger.info(
+      `Submit capture — promptLen=${params.prompt.length} size=${params.rect.width}x${params.rect.height}`,
+    );
+    // Phase 1: interaction validation only. Forwarding to chat store is TODO.
     this.close();
-    return result;
   }
 
   close(): void {
@@ -80,9 +127,25 @@ export class ScreenCaptureManager {
     logger.info('Capture session closed');
   }
 
-  private hideOverlay(): void {
-    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-      this.overlayWindow.hide();
+  /**
+   * Fade overlay out via opacity so the capture pipeline sees clean pixels
+   * underneath, then restore opacity. Keeping the window alive (as opposed to
+   * hide/show) avoids focus/z-order glitches.
+   */
+  private async withOverlayHidden<T>(task: () => Promise<T>): Promise<T> {
+    const win = this.overlayWindow;
+    if (!win || win.isDestroyed()) {
+      return task();
+    }
+
+    win.setOpacity(0);
+    await delay(HIDE_SETTLE_MS);
+    try {
+      return await task();
+    } finally {
+      if (!win.isDestroyed()) {
+        win.setOpacity(1);
+      }
     }
   }
 
@@ -110,7 +173,10 @@ export class ScreenCaptureManager {
     });
 
     win.setAlwaysOnTop(true, 'screen-saver');
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    win.setVisibleOnAllWorkspaces(true, {
+      ...(isMac ? { skipTransformProcessType: true } : {}),
+      visibleOnFullScreen: true,
+    });
 
     if (isMac) {
       win.setHiddenInMissionControl(true);
@@ -118,19 +184,31 @@ export class ScreenCaptureManager {
 
     this.overlayWindow = win;
 
-    // Load the overlay MPA entry (separate from main SPA)
-    const url = await this.app.buildRendererUrl('/overlay');
-    await win.loadURL(url);
+    win.webContents.on('did-fail-load', (_event, code, description) => {
+      logger.error(`Overlay did-fail-load code=${code} description=${description}`);
+    });
 
-    // Send session data once renderer is ready
-    win.webContents.on('did-finish-load', () => {
+    const url = await this.app.buildRendererUrl('/overlay');
+    logger.info(`Loading overlay URL: ${url}`);
+
+    win.webContents.once('did-finish-load', () => {
+      logger.info('Overlay did-finish-load');
       if (this.session && !win.isDestroyed()) {
+        logger.info(`Sending overlay session with ${this.session.windows.length} windows`);
         win.webContents.send('screenCaptureSession', this.session);
       }
     });
 
+    await win.loadURL(url);
+
     win.show();
+    win.focus();
+    win.moveTop();
 
     logger.info('Overlay window created and shown');
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import dotenv from 'dotenv';
 import { defineConfig } from 'electron-vite';
 import type { PluginOption, ViteDevServer } from 'vite';
@@ -118,6 +119,7 @@ export default defineConfig({
     optimizeDeps: sharedOptimizeDeps,
     plugins: [
       electronDesktopHtmlPlugin(),
+      vanillaExtractPlugin(),
       ...(sharedRendererPlugins({ platform: 'desktop' }) as PluginOption[]),
     ],
     resolve: {
