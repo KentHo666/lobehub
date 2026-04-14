@@ -1,4 +1,6 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
+
+import type { ChildProcess } from 'node:child_process';
 
 import { createLogger } from '@/utils/logger';
 
@@ -7,48 +9,60 @@ const logger = createLogger('core:MacOSDoubleOptionMonitor');
 export const MACOS_DOUBLE_OPTION_SHORTCUT = 'doubleOption';
 
 const DOUBLE_OPTION_SIGNAL = 'DOUBLE_OPTION';
+const OSASCRIPT_PATH = '/usr/bin/osascript';
 
 const MONITOR_SCRIPT = String.raw`
-ObjC.import('Cocoa');
+ObjC.import('ApplicationServices');
 
-const optionMask = Number($.NSEventModifierFlagOption);
-const blockedMask =
-  Number($.NSEventModifierFlagCommand) |
-  Number($.NSEventModifierFlagControl) |
-  Number($.NSEventModifierFlagShift) |
-  Number($.NSEventModifierFlagCapsLock) |
-  Number($.NSEventModifierFlagFunction);
-
+const leftCommandKeyCode = 55;
+const rightCommandKeyCode = 54;
+const leftControlKeyCode = 59;
+const rightControlKeyCode = 62;
+const leftShiftKeyCode = 56;
+const rightShiftKeyCode = 60;
+const capsLockKeyCode = 57;
+const functionKeyCode = 63;
 const leftOptionKeyCode = 58;
 const rightOptionKeyCode = 61;
 const doubleTapIntervalMs = 300;
+const pollIntervalSeconds = 0.02;
 
+const isKeyPressed = (keyCode) =>
+  Boolean($.CGEventSourceKeyState($.kCGEventSourceStateCombinedSessionState, keyCode));
+
+let lastOptionDown = false;
 let lastOptionDownAt = 0;
 
-const handler = ObjC.block('void', ['id'], function(event) {
-  const keyCode = Number(event.keyCode);
+while (true) {
+  const optionDown = isKeyPressed(leftOptionKeyCode) || isKeyPressed(rightOptionKeyCode);
+  const hasOtherModifiers =
+    isKeyPressed(leftCommandKeyCode) ||
+    isKeyPressed(rightCommandKeyCode) ||
+    isKeyPressed(leftControlKeyCode) ||
+    isKeyPressed(rightControlKeyCode) ||
+    isKeyPressed(leftShiftKeyCode) ||
+    isKeyPressed(rightShiftKeyCode) ||
+    isKeyPressed(capsLockKeyCode) ||
+    isKeyPressed(functionKeyCode);
 
-  if (keyCode !== leftOptionKeyCode && keyCode !== rightOptionKeyCode) return;
+  if (optionDown && !lastOptionDown && !hasOtherModifiers) {
+    const now = Date.now();
 
-  const flags = Number(event.modifierFlags);
-  const optionDown = (flags & optionMask) !== 0;
-  const hasOtherModifiers = (flags & blockedMask) !== 0;
-
-  if (!optionDown || hasOtherModifiers) return;
-
-  const now = Date.now();
-
-  if (now - lastOptionDownAt <= doubleTapIntervalMs) {
-    console.log('DOUBLE_OPTION');
-    lastOptionDownAt = 0;
-    return;
+    if (now - lastOptionDownAt <= doubleTapIntervalMs) {
+      console.log('DOUBLE_OPTION');
+      lastOptionDownAt = 0;
+    } else {
+      lastOptionDownAt = now;
+    }
   }
 
-  lastOptionDownAt = now;
-});
+  if (hasOtherModifiers) {
+    lastOptionDownAt = 0;
+  }
 
-$.NSEvent.addGlobalMonitorForEventsMatchingMaskHandler($.NSEventMaskFlagsChanged, handler);
-$.NSRunLoop.currentRunLoop.run();
+  lastOptionDown = optionDown;
+  delay(pollIntervalSeconds);
+}
 `;
 
 export class MacOSDoubleOptionMonitor {
@@ -66,7 +80,7 @@ export class MacOSDoubleOptionMonitor {
 
     logger.info('Starting macOS double Option monitor');
 
-    const child = spawn('osascript', ['-l', 'JavaScript', '-e', MONITOR_SCRIPT], {
+    const child = spawn(OSASCRIPT_PATH, ['-l', 'JavaScript', '-e', MONITOR_SCRIPT], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
