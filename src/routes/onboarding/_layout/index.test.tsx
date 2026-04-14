@@ -1,3 +1,4 @@
+import type * as BusinessConst from '@lobechat/business-const';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -5,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import OnBoardingContainer from './index';
 
 vi.mock('@lobechat/business-const', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = (await importOriginal()) as typeof BusinessConst;
 
   return {
     ...actual,
