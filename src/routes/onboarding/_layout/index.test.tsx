@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { type ReactNode } from 'react';
+import { cloneElement, type ReactElement, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -22,7 +22,7 @@ vi.mock('react-i18next', () => ({
     components,
     values,
   }: {
-    components: Record<string, ReactNode>;
+    components: Record<string, ReactElement>;
     values?: { mode?: string; skip?: string };
   }) => {
     const modeText = values?.mode ?? '';
@@ -31,12 +31,18 @@ vi.mock('react-i18next', () => ({
     return (
       <>
         {'Not feeling it today? You can switch to '}
-        {components.modeLink}
+        {cloneElement(
+          components.modeLink,
+          undefined,
+          cloneElement(components.modeText, undefined, modeText),
+        )}
         {' or '}
-        {components.skipLink}
+        {cloneElement(
+          components.skipLink,
+          undefined,
+          cloneElement(components.skipText, undefined, skipText),
+        )}
         {'.'}
-        <span style={{ display: 'none' }}>{modeText}</span>
-        <span style={{ display: 'none' }}>{skipText}</span>
       </>
     );
   },
