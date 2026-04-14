@@ -148,7 +148,6 @@ export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
           },
           { type: 'separator' },
           {
-            accelerator: 'Shift+Command+X',
             click: () => this.app.screenCaptureManager.startSession(),
             label: t('tray.openMiniToolbar'),
           },

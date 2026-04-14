@@ -290,6 +290,19 @@ describe('MacOSMenu', () => {
       expect(preferencesItem.accelerator).toBe('Command+,');
     });
 
+    it('should not show a fixed accelerator for Quick Composer', () => {
+      macOSMenu.buildAndSetAppMenu();
+
+      const template = (Menu.buildFromTemplate as any).mock.calls[0][0];
+      const fileMenu = template.find((item: any) => item.label === 'File');
+      const quickComposerItem = fileMenu.submenu.find(
+        (item: any) => item.label === 'Quick Composer',
+      );
+
+      expect(quickComposerItem).toBeDefined();
+      expect(quickComposerItem.accelerator).toBeUndefined();
+    });
+
     it('should use role for quit (accelerator handled by Electron)', () => {
       macOSMenu.buildAndSetAppMenu();
 
