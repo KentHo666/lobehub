@@ -3,6 +3,7 @@ import { RequestTrigger } from '@lobechat/types';
 import type { Message, SentMessage, Thread } from 'chat';
 import { emoji } from 'chat';
 import debug from 'debug';
+import { nanoid } from 'nanoid';
 
 import { AgentBotProviderModel } from '@/database/models/agentBotProvider';
 import { TopicModel } from '@/database/models/topic';
@@ -11,6 +12,14 @@ import type { LobeChatDatabase } from '@/database/type';
 import { createAbortError, isAbortError } from '@/server/services/agentRuntime/abort';
 import { AiAgentService } from '@/server/services/aiAgent';
 import { getMessageGatewayClient } from '@/server/services/gateway/MessageGatewayClient';
+import {
+  buildBotCtxKey,
+  getMessageQueueService,
+  type MergedQueuedInboundGroup,
+  mergeQueuedInboundMessages,
+  type MessageQueueService,
+  type QueuedInboundMessage,
+} from '@/server/services/messageQueue';
 import { isQueueAgentRuntimeEnabled } from '@/server/services/queue/impls';
 import { SystemAgentService } from '@/server/services/systemAgent';
 
@@ -211,6 +220,305 @@ export class AgentBridgeService {
     this.userId = userId;
   }
 
+  // --------------- Message Queue integration ---------------
+
+  /**
+   * Derive the bot platform slug from the Chat SDK thread id
+   * (`{platform}:...` composite) with botContext override when available.
+   */
+  private resolveBotPlatform(
+    thread: Thread<ThreadState>,
+    botContext?: ChatTopicBotContext,
+  ): string {
+    return botContext?.platform ?? thread.id.split(':')[0] ?? 'bot';
+  }
+
+  private buildBotCtxKeyForThread(
+    thread: Thread<ThreadState>,
+    botContext?: ChatTopicBotContext,
+  ): string {
+    return buildBotCtxKey(this.userId, this.resolveBotPlatform(thread, botContext), thread.id);
+  }
+
+  private getMessageQueueOrNull(): MessageQueueService | null {
+    return getMessageQueueService();
+  }
+
+  /**
+   * Run the Redis message-queue gate for an inbound bot message.
+   *
+   * Returns one of:
+   *  - 'proceed'   — continue the caller's normal flow.
+   *  - 'disabled'  — Redis not configured / queue call failed. Caller MUST
+   *                  fall back to its legacy in-process guard.
+   *  - 'queued' | 'duplicate' | 'rejected' — the caller must stop; this
+   *                  helper already handled user-facing feedback.
+   */
+  private async guardWithMessageQueue(
+    thread: Thread<ThreadState>,
+    message: Message,
+    opts: { agentId: string; botContext?: ChatTopicBotContext },
+  ): Promise<'proceed' | 'queued' | 'duplicate' | 'rejected' | 'disabled'> {
+    const queue = this.getMessageQueueOrNull();
+    if (!queue) return 'disabled';
+
+    const platform = this.resolveBotPlatform(thread, opts.botContext);
+    const ctxKey = buildBotCtxKey(this.userId, platform, thread.id);
+
+    const queuedMsg: QueuedInboundMessage = {
+      content: message.text ?? '',
+      createdAt: Date.now(),
+      id: message.id,
+      interruptMode: 'soft',
+      rawBotPayload: {
+        appId: opts.botContext?.applicationId ?? '',
+        messageId: message.id,
+        platform,
+        threadId: thread.id,
+      },
+      source: 'bot',
+    };
+
+    let decision: 'proceed' | 'queued' | 'duplicate' | 'rejected';
+    try {
+      decision = await queue.checkAndEnqueue(ctxKey, queuedMsg);
+    } catch (error) {
+      log('guardWithMessageQueue: checkAndEnqueue failed, falling back to legacy gate: %O', error);
+      return 'disabled';
+    }
+
+    log('guardWithMessageQueue: ctxKey=%s decision=%s msgId=%s', ctxKey, decision, message.id);
+
+    if (decision === 'queued') {
+      await safeSideEffect(
+        () => thread.adapter.addReaction(thread.id, message.id, emoji.hourglass),
+        'queued reaction',
+      );
+    } else if (decision === 'rejected') {
+      await safeSideEffect(
+        () =>
+          thread.post(
+            'Queue is full. Please wait for the current message to finish before sending more.',
+          ),
+        'queue full notice',
+      );
+    }
+
+    return decision;
+  }
+
+  /**
+   * Set a preliminary active marker before `execAgent` returns so that a
+   * second inbound message arriving during the startup window is queued
+   * rather than running concurrently. The marker is overwritten with the
+   * real operationId once it becomes available.
+   */
+  private async markActiveWithPlaceholder(ctxKey: string): Promise<string> {
+    const placeholder = `pending-${nanoid(10)}`;
+    const queue = this.getMessageQueueOrNull();
+    if (!queue) return placeholder;
+    try {
+      await queue.markActive(ctxKey, placeholder);
+    } catch (error) {
+      log('markActiveWithPlaceholder: failed (ctxKey=%s): %O', ctxKey, error);
+    }
+    return placeholder;
+  }
+
+  private async markActiveWithOperationId(ctxKey: string, operationId: string): Promise<void> {
+    const queue = this.getMessageQueueOrNull();
+    if (!queue) return;
+    try {
+      await queue.markActive(ctxKey, operationId);
+    } catch (error) {
+      log('markActiveWithOperationId: failed (ctxKey=%s, opId=%s): %O', ctxKey, operationId, error);
+    }
+  }
+
+  /**
+   * Release the active slot + purge the pending list. Used by /stop, topic
+   * delete, and failure paths that need to unblock the context key without
+   * running the queued messages.
+   */
+  async cancelAndClearBotQueue(
+    thread: Thread<ThreadState>,
+    botContext?: ChatTopicBotContext,
+  ): Promise<void> {
+    const queue = this.getMessageQueueOrNull();
+    if (!queue) return;
+    const ctxKey = this.buildBotCtxKeyForThread(thread, botContext);
+    try {
+      await queue.cancelAndClear(ctxKey);
+    } catch (error) {
+      log('cancelAndClearBotQueue: failed (ctxKey=%s): %O', ctxKey, error);
+    }
+  }
+
+  /**
+   * Release the queue for a ctxKey computed externally (e.g. from a
+   * webhook body that has platform + threadId + userId).
+   */
+  static async cancelAndClearByCtx(ctxKey: string): Promise<void> {
+    const queue = getMessageQueueService();
+    if (!queue) return;
+    try {
+      await queue.cancelAndClear(ctxKey);
+    } catch (error) {
+      log('cancelAndClearByCtx: failed (ctxKey=%s): %O', ctxKey, error);
+    }
+  }
+
+  /**
+   * Drain a ctxKey's pending messages and re-inject each merged group by
+   * calling `execAgent` directly with the bot-callback webhook pipeline.
+   *
+   * Unlike the initial @mention path, re-injected runs skip the Chat SDK
+   * UX scaffolding (progress message / typing reactions) — the callback
+   * pipeline still posts the final reply into the same thread, so the
+   * user experience degrades gracefully: they see their queued messages
+   * processed in order, just without a per-run "received" indicator.
+   */
+  async drainAndReinject(params: {
+    agentId: string;
+    applicationId: string;
+    ctxKey: string;
+    operationId: string;
+    platform: string;
+    platformThreadId: string;
+    threadName?: string;
+    topicId: string;
+  }): Promise<number> {
+    const queue = this.getMessageQueueOrNull();
+    if (!queue) return 0;
+
+    let drained: QueuedInboundMessage[];
+    try {
+      drained = await queue.drainOnComplete(params.ctxKey, params.operationId);
+    } catch (error) {
+      log('drainAndReinject: drainOnComplete failed (ctxKey=%s): %O', params.ctxKey, error);
+      return 0;
+    }
+    if (drained.length === 0) return 0;
+
+    const groups = mergeQueuedInboundMessages(drained);
+    log(
+      'drainAndReinject: ctxKey=%s drained %d msgs into %d group(s)',
+      params.ctxKey,
+      drained.length,
+      groups.length,
+    );
+
+    let reinjected = 0;
+    for (const group of groups) {
+      if (group.source !== 'bot') continue;
+      try {
+        await this.reinjectBotGroup(group, params);
+        reinjected += 1;
+      } catch (error) {
+        log('drainAndReinject: reinject group failed: %O', error);
+        // Release the queue so a future message isn't blocked by a dangling
+        // placeholder active key from the failed run.
+        await queue.cancelAndClear(params.ctxKey).catch(() => undefined);
+        break;
+      }
+    }
+    return reinjected;
+  }
+
+  /**
+   * Re-execute a merged bot message group via `execAgent`, registering the
+   * bot-callback webhook so the normal completion pipeline delivers the
+   * reply and recursively drains anything that queued during this run.
+   */
+  private async reinjectBotGroup(
+    group: MergedQueuedInboundGroup,
+    params: {
+      agentId: string;
+      applicationId: string;
+      ctxKey: string;
+      platform: string;
+      platformThreadId: string;
+      threadName?: string;
+      topicId: string;
+    },
+  ): Promise<void> {
+    // Hold the slot while this run starts so concurrent enqueues queue
+    // behind it instead of racing through as another 'proceed'.
+    await this.markActiveWithPlaceholder(params.ctxKey);
+
+    const aiAgentService = new AiAgentService(this.db, this.userId);
+    const callbackUrl = '/api/agent/webhooks/bot-callback';
+    const webhookBody = {
+      agentId: params.agentId,
+      applicationId: params.applicationId,
+      platformThreadId: params.platformThreadId,
+      reinject: true,
+      threadName: params.threadName,
+      userMessageId: `reinject-${nanoid(10)}`,
+    };
+
+    const result = await aiAgentService.execAgent({
+      agentId: params.agentId,
+      appContext: { topicId: params.topicId },
+      autoStart: true,
+      botContext: {
+        applicationId: params.applicationId,
+        platform: params.platform,
+        platformThreadId: params.platformThreadId,
+      },
+      fileIds: group.files.length > 0 ? group.files : undefined,
+      hooks: [
+        {
+          handler: async () => {
+            /* no local handler — queue mode delivery */
+          },
+          id: 'bot-step-progress',
+          type: 'afterStep',
+          webhook: {
+            body: { ...webhookBody, type: 'step' },
+            delivery: 'qstash',
+            url: callbackUrl,
+          },
+        },
+        {
+          handler: async () => {
+            /* no local handler — queue mode delivery */
+          },
+          id: 'bot-completion',
+          type: 'onComplete',
+          webhook: {
+            body: { ...webhookBody, type: 'completion', userPrompt: group.content },
+            delivery: 'qstash',
+            url: callbackUrl,
+          },
+        },
+      ],
+      prompt: group.content,
+      title: '',
+      trigger: RequestTrigger.Bot,
+      userInterventionConfig: { approvalMode: 'headless' },
+    });
+
+    if (result.success && result.operationId) {
+      await this.markActiveWithOperationId(params.ctxKey, result.operationId);
+      log(
+        'reinjectBotGroup: ctxKey=%s opId=%s msgIds=%o',
+        params.ctxKey,
+        result.operationId,
+        group.sourceMessageIds,
+      );
+    } else {
+      // Failed to start — release the placeholder so the queue can move on.
+      const queue = this.getMessageQueueOrNull();
+      if (queue) await queue.cancelAndClear(params.ctxKey).catch(() => undefined);
+      throw new Error(
+        `reinjectBotGroup: execAgent did not start (ctxKey=${params.ctxKey}): ${
+          (result as { error?: string }).error ?? 'unknown'
+        }`,
+      );
+    }
+  }
+
   private async interruptTrackedOperation(threadId: string, operationId: string): Promise<void> {
     const aiAgentService = new AiAgentService(this.db, this.userId);
     const result = await aiAgentService.interruptTask({ operationId });
@@ -273,7 +581,18 @@ export class AgentBridgeService {
       ((message as any).attachments as unknown[] | undefined)?.length ?? 0,
     );
 
-    // Skip if there's already an active execution for this thread
+    // Redis-backed queue gate: serialises concurrent inbound messages on
+    // the same thread across serverless invocations. Falls back to the
+    // legacy in-process gate below when Redis is unavailable.
+    const queueDecision = await this.guardWithMessageQueue(thread, message, {
+      agentId,
+      botContext,
+    });
+    if (queueDecision !== 'proceed' && queueDecision !== 'disabled') return;
+
+    // Legacy in-process guard — primary path when Redis is disabled; also
+    // a safety net for the short startup window before `markActive` sets
+    // the real operationId on Redis.
     if (AgentBridgeService.activeThreads.has(thread.id)) {
       log('handleMention: skipping, thread=%s already has an active execution', thread.id);
       return;
@@ -374,7 +693,19 @@ export class AgentBridgeService {
       return this.handleMention(thread, message, opts);
     }
 
-    // Skip if there's already an active execution for this thread.
+    // Redis-backed queue gate: serialises concurrent inbound messages on
+    // the same thread across serverless invocations. Falls back to the
+    // legacy in-process gate below when Redis is unavailable.
+    const queueDecision = await this.guardWithMessageQueue(thread, message, {
+      agentId,
+      botContext,
+    });
+    if (queueDecision !== 'proceed' && queueDecision !== 'disabled') return;
+
+    // Legacy in-process guard — primary path when Redis is disabled; also
+    // a safety net for the short startup window before `markActive` sets
+    // the real operationId on Redis.
+    //
     // This must run before the stale-topic check to prevent a race where
     // a concurrent message clears topicId (stale reset) and then no-ops
     // in handleMention because the thread is active — dropping the message
@@ -681,6 +1012,9 @@ export class AgentBridgeService {
       webhookBody,
     } = opts;
 
+    const ctxKey = this.buildBotCtxKeyForThread(thread, botContext);
+    await this.markActiveWithPlaceholder(ctxKey);
+
     let result: ExecAgentResult;
     try {
       result = await AgentBridgeService.runWithStartupSignal(thread.id, (signal) =>
@@ -767,6 +1101,7 @@ export class AgentBridgeService {
 
     if (result.operationId) {
       AgentBridgeService.activeOperations.set(thread.id, result.operationId);
+      await this.markActiveWithOperationId(ctxKey, result.operationId);
 
       if (AgentBridgeService.consumeStopRequest(thread.id)) {
         try {
@@ -826,12 +1161,17 @@ export class AgentBridgeService {
     let { progressMessage } = opts;
     let operationStartTime = 0;
 
+    const ctxKey = this.buildBotCtxKeyForThread(thread, botContext);
+    await this.markActiveWithPlaceholder(ctxKey);
+    const platform = this.resolveBotPlatform(thread, botContext);
+
     return new Promise<{ reply: string; topicId: string }>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error(`Agent execution timed out`));
       }, EXECUTION_TIMEOUT);
 
       let resolvedTopicId = topicId ?? '';
+      let resolvedOperationId: string | undefined;
 
       const getElapsedMs = () => (operationStartTime > 0 ? Date.now() - operationStartTime : 0);
 
@@ -915,6 +1255,8 @@ export class AgentBridgeService {
                   } catch {
                     // ignore send failure
                   }
+                  // Leave pending messages in the queue — the user can retry
+                  // with /stop + /new to clear them manually if needed.
                   reject(new Error(errorMsg));
                   return;
                 }
@@ -970,6 +1312,24 @@ export class AgentBridgeService {
                       chunks.length,
                     );
                     resolve({ reply: lastAssistantContent, topicId: resolvedTopicId });
+
+                    // Drain queued inbound messages (if any) and re-inject.
+                    // Fire-and-forget: must not block resolve(), and reinject
+                    // failures have already been swallowed by drainAndReinject.
+                    if (resolvedOperationId && botContext?.applicationId) {
+                      this.drainAndReinject({
+                        agentId,
+                        applicationId: botContext.applicationId,
+                        ctxKey,
+                        operationId: resolvedOperationId,
+                        platform,
+                        platformThreadId: thread.id,
+                        threadName: channelContext?.thread?.name,
+                        topicId: resolvedTopicId,
+                      }).catch((error) => {
+                        log('executeWithCallback[local]: drainAndReinject failed: %O', error);
+                      });
+                    }
 
                     // Fire-and-forget: summarize topic title in DB
                     if (resolvedTopicId && prompt) {
@@ -1043,6 +1403,8 @@ export class AgentBridgeService {
 
           if (result.operationId) {
             AgentBridgeService.activeOperations.set(thread.id, result.operationId);
+            resolvedOperationId = result.operationId;
+            await this.markActiveWithOperationId(ctxKey, result.operationId);
 
             if (AgentBridgeService.consumeStopRequest(thread.id)) {
               try {

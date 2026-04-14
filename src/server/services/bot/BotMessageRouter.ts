@@ -10,6 +10,7 @@ import type { LobeChatDatabase } from '@/database/type';
 import { getAgentRuntimeRedisClient } from '@/server/modules/AgentRuntime/redis';
 import { KeyVaultsGateKeeper } from '@/server/modules/KeyVaultsEncrypt';
 import { AiAgentService } from '@/server/services/aiAgent';
+import { buildBotCtxKey } from '@/server/services/messageQueue';
 
 import { AgentBridgeService } from './AgentBridgeService';
 import {
@@ -657,6 +658,12 @@ export class BotMessageRouter {
         description: 'Stop the current execution',
         handler: async (ctx) => {
           log('command /stop: agent=%s, platform=%s', agentId, platform);
+          // Clear queued messages unconditionally — a /stop should drop the
+          // pending list regardless of whether an execution is currently
+          // running. cancelAndClear is a no-op when Redis is unavailable.
+          const ctxKey = buildBotCtxKey(userId, platform, ctx.threadId);
+          await AgentBridgeService.cancelAndClearByCtx(ctxKey);
+
           const isActive = AgentBridgeService.isThreadActive(ctx.threadId);
           if (!isActive) {
             await ctx.post('No active execution to stop.');

@@ -6,6 +6,7 @@ import { type LobeChatDatabase } from '@/database/type';
 import { getAgentRuntimeRedisClient } from '@/server/modules/AgentRuntime/redis';
 import { KeyVaultsGateKeeper } from '@/server/modules/KeyVaultsEncrypt';
 import { getMessageGatewayClient } from '@/server/services/gateway/MessageGatewayClient';
+import { buildBotCtxKey } from '@/server/services/messageQueue';
 import { SystemAgentService } from '@/server/services/systemAgent';
 
 import { AgentBridgeService } from './AgentBridgeService';
@@ -24,6 +25,7 @@ const log = debug('lobe-server:bot:callback');
 // --------------- Callback body types ---------------
 
 export interface BotCallbackBody {
+  agentId?: string;
   applicationId: string;
   content?: string;
   cost?: number;
@@ -39,10 +41,14 @@ export interface BotCallbackBody {
   lastLLMContent?: string;
   lastToolsCalling?: any;
   llmCalls?: number;
+  /** Agent runtime operationId; populated by the hook dispatcher. */
+  operationId?: string;
   platformThreadId: string;
   progressMessageId?: string;
   reason?: string;
   reasoning?: string;
+  /** Marker set by AgentBridgeService on re-injected runs. */
+  reinject?: boolean;
   shouldContinue?: boolean;
   stepType?: 'call_llm' | 'call_tool';
   thinking?: boolean;
@@ -114,6 +120,66 @@ export class BotCallbackService {
       // to keep the thread marked active while the agent runs on the job queue.
       AgentBridgeService.clearActiveThread(platformThreadId);
       this.summarizeTopicTitle(body, messenger);
+
+      // Drain any messages queued during the completed run and re-inject.
+      // Only on successful completion — error / interrupted paths leave the
+      // queue intact so the user can retry or /stop to clear it.
+      if (body.reason !== 'error' && body.reason !== 'interrupted') {
+        await this.drainQueueAfterCompletion(body, platform);
+      }
+    }
+  }
+
+  /**
+   * Drain the Redis message queue for this ctxKey and kick off a re-injected
+   * agent run for each merged group of pending messages.
+   */
+  private async drainQueueAfterCompletion(body: BotCallbackBody, platform: string): Promise<void> {
+    const { userId, platformThreadId, operationId, topicId, applicationId, threadName } = body;
+    if (!userId || !operationId) {
+      log('drainQueueAfterCompletion: missing userId or operationId, skipping');
+      return;
+    }
+
+    let agentId = body.agentId;
+    if (!agentId || !topicId) {
+      // agentId / topicId should be present on the event but guard against
+      // older runs that predate the hook-body additions.
+      try {
+        const row = await AgentBotProviderModel.findByPlatformAndAppId(
+          this.db,
+          platform,
+          applicationId,
+        );
+        agentId = agentId ?? row?.agentId;
+      } catch (error) {
+        log('drainQueueAfterCompletion: provider lookup failed: %O', error);
+      }
+    }
+    if (!agentId || !topicId) {
+      log(
+        'drainQueueAfterCompletion: cannot build ctxKey (agentId=%s, topicId=%s), skipping',
+        agentId,
+        topicId,
+      );
+      return;
+    }
+
+    const ctxKey = buildBotCtxKey(userId, platform, platformThreadId);
+    const bridge = new AgentBridgeService(this.db, userId);
+    try {
+      await bridge.drainAndReinject({
+        agentId,
+        applicationId,
+        ctxKey,
+        operationId,
+        platform,
+        platformThreadId,
+        threadName,
+        topicId,
+      });
+    } catch (error) {
+      log('drainQueueAfterCompletion: drainAndReinject failed: %O', error);
     }
   }
 
