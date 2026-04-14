@@ -365,7 +365,7 @@ describe('LobeGoogleAI', () => {
         // Read all remaining chunks
         let result;
         while (!(result = await reader.read()).done) {
-          chunks = chunks.concat(result.value);
+          chunks.push(result.value);
         }
 
         // Batch-assert the entire chunks array
@@ -412,7 +412,7 @@ describe('LobeGoogleAI', () => {
         const chunks: any[] = [(await reader.read()).value];
         let result;
         while (!(result = await reader.read()).done) {
-          chunks = chunks.concat(result.value);
+          chunks.push(result.value);
         }
 
         // Assert both data and error chunk together
@@ -479,7 +479,7 @@ describe('LobeGoogleAI', () => {
         const chunks: any[] = [(await reader.read()).value];
         let result;
         while (!(result = await reader.read()).done) {
-          chunks = chunks.concat(result.value);
+          chunks.push(result.value);
         }
 
         expect(chunks).toEqual([
