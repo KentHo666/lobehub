@@ -17,9 +17,14 @@ const ResourcesSection = memo<ResourcesSectionProps>(({ onSelectDocument, select
       <Accordion defaultExpandedKeys={['resources']} gap={0}>
         <AccordionItem
           itemKey={'resources'}
-          paddingBlock={0}
-          paddingInline={0}
+          paddingBlock={2}
+          paddingInline={6}
           title={<Text strong>{t('agentWorkspace.resources')}</Text>}
+          styles={{
+            header: {
+              width: 'fit-content',
+            },
+          }}
         >
           <Flexbox paddingBlock={8}>
             <AgentDocumentsGroup

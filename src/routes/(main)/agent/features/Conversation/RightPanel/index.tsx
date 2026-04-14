@@ -7,6 +7,8 @@ import NavHeader from '@/features/NavHeader';
 import RightPanel from '@/features/RightPanel';
 import { useGlobalStore } from '@/store/global';
 
+import AgentSummary from './AgentSummary';
+import ProgressSection from './ProgressSection';
 import ResourcesSection from './ResourcesSection';
 
 interface AgentWorkspaceRightPanelProps {
@@ -23,7 +25,6 @@ const AgentWorkspaceRightPanel = memo<AgentWorkspaceRightPanelProps>(
         <Flexbox height={'100%'} width={'100%'}>
           <NavHeader
             showTogglePanelButton={false}
-            style={{ paddingBlock: 8, paddingInline: 8 }}
             right={
               <ActionIcon
                 icon={PanelRightCloseIcon}
@@ -31,8 +32,15 @@ const AgentWorkspaceRightPanel = memo<AgentWorkspaceRightPanelProps>(
                 onClick={() => toggleRightPanel(false)}
               />
             }
+            style={{
+              paddingBlock: 8,
+              paddingInline: 8,
+              position: 'absolute',
+            }}
           />
           <Flexbox gap={8} height={'100%'} style={{ overflowY: 'auto' }} width={'100%'}>
+            <AgentSummary />
+            <ProgressSection />
             <ResourcesSection
               selectedDocumentId={selectedDocumentId}
               onSelectDocument={onSelectDocument}
