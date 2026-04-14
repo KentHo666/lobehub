@@ -19,7 +19,7 @@ const ResourcesSection = memo<ResourcesSectionProps>(({ onSelectDocument, select
           itemKey={'resources'}
           paddingBlock={2}
           paddingInline={6}
-          title={<Text strong>{t('agentWorkspace.resources')}</Text>}
+          title={<Text strong>{t('agentWorkingSidebar.resources')}</Text>}
           styles={{
             header: {
               width: 'fit-content',

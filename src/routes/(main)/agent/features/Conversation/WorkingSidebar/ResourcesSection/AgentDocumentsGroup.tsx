@@ -41,7 +41,7 @@ const AgentDocumentsGroup = memo<AgentDocumentsGroupProps>(
             path: item.id,
             type: 'file' as const,
           })),
-          name: t('agentWorkspace.agentDocuments'),
+          name: t('agentWorkingSidebar.agentDocuments'),
           path: 'agent-documents',
           type: 'directory' as const,
         },
@@ -57,7 +57,7 @@ const AgentDocumentsGroup = memo<AgentDocumentsGroupProps>(
         setEditingDocumentId(null);
 
         if (!normalizedTitle) {
-          message.error(t('agentWorkspace.resources.renameEmpty', { ns: 'chat' }));
+          message.error(t('agentWorkingSidebar.resources.renameEmpty', { ns: 'chat' }));
           return;
         }
 
@@ -100,12 +100,12 @@ const AgentDocumentsGroup = memo<AgentDocumentsGroupProps>(
             },
           );
 
-          message.success(t('agentWorkspace.resources.renameSuccess', { ns: 'chat' }));
+          message.success(t('agentWorkingSidebar.resources.renameSuccess', { ns: 'chat' }));
         } catch (error) {
           message.error(
             error instanceof Error
               ? error.message
-              : t('agentWorkspace.resources.renameError', { ns: 'chat' }),
+              : t('agentWorkingSidebar.resources.renameError', { ns: 'chat' }),
           );
         }
       },
@@ -117,7 +117,7 @@ const AgentDocumentsGroup = memo<AgentDocumentsGroupProps>(
         if (!agentId) return;
 
         modal.confirm({
-          content: t('agentWorkspace.resources.deleteConfirm', { ns: 'chat' }),
+          content: t('agentWorkingSidebar.resources.deleteConfirm', { ns: 'chat' }),
           okButtonProps: { danger: true },
           okText: t('delete', { ns: 'common' }),
           onOk: async () => {
@@ -137,18 +137,18 @@ const AgentDocumentsGroup = memo<AgentDocumentsGroupProps>(
                 },
               );
 
-              message.success(t('agentWorkspace.resources.deleteSuccess', { ns: 'chat' }));
+              message.success(t('agentWorkingSidebar.resources.deleteSuccess', { ns: 'chat' }));
             } catch (error) {
               if (wasSelected) onSelectDocument(id);
               message.error(
                 error instanceof Error
                   ? error.message
-                  : t('agentWorkspace.resources.deleteError', { ns: 'chat' }),
+                  : t('agentWorkingSidebar.resources.deleteError', { ns: 'chat' }),
               );
               throw error;
             }
           },
-          title: t('agentWorkspace.resources.deleteTitle', { ns: 'chat' }),
+          title: t('agentWorkingSidebar.resources.deleteTitle', { ns: 'chat' }),
         });
       },
       [agentId, message, modal, mutate, onSelectDocument, selectedDocumentId, t],
@@ -179,9 +179,9 @@ const AgentDocumentsGroup = memo<AgentDocumentsGroupProps>(
     return (
       <Flexbox gap={8}>
         {isLoading && <FileTreeSkeleton rows={6} showRootFile={false} />}
-        {error && <Text type={'danger'}>{t('agentWorkspace.resources.error')}</Text>}
+        {error && <Text type={'danger'}>{t('agentWorkingSidebar.resources.error')}</Text>}
         {!isLoading && !error && data.length === 0 && (
-          <Text type={'secondary'}>{t('agentWorkspace.resources.empty')}</Text>
+          <Text type={'secondary'}>{t('agentWorkingSidebar.resources.empty')}</Text>
         )}
         {!isLoading && !error && data.length > 0 && (
           <FileTree

@@ -22,12 +22,12 @@ vi.mock('react-i18next', () => ({
     t: (key: string) =>
       (
         ({
-          'agentWorkspace.agentDocuments': 'Agent Documents',
-          'agentWorkspace.resources.empty': 'No agent documents yet',
-          'agentWorkspace.resources.error': 'Failed to load resources',
-          'agentWorkspace.resources.loading': 'Loading resources...',
-          'agentWorkspace.resources.previewError': 'Failed to load preview',
-          'agentWorkspace.resources.previewLoading': 'Loading preview...',
+          'agentWorkingSidebar.agentDocuments': 'Agent Documents',
+          'agentWorkingSidebar.resources.empty': 'No agent documents yet',
+          'agentWorkingSidebar.resources.error': 'Failed to load resources',
+          'agentWorkingSidebar.resources.loading': 'Loading resources...',
+          'agentWorkingSidebar.resources.previewError': 'Failed to load preview',
+          'agentWorkingSidebar.resources.previewLoading': 'Loading preview...',
         }) as Record<string, string>
       )[key] || key,
   }),

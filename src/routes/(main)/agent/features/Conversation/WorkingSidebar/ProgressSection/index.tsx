@@ -128,7 +128,7 @@ const ProgressSection = memo(() => {
               itemKey={'progress'}
               paddingBlock={2}
               paddingInline={6}
-              title={<Text strong>{t('agentWorkspace.progress')}</Text>}
+              title={<Text strong>{t('agentWorkingSidebar.progress')}</Text>}
               styles={{
                 header: {
                   width: 'fit-content',

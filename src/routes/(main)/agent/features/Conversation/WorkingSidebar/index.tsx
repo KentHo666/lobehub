@@ -12,12 +12,12 @@ import AgentSummary from './AgentSummary';
 import ProgressSection from './ProgressSection';
 import ResourcesSection from './ResourcesSection';
 
-interface AgentWorkspaceRightPanelProps {
+interface AgentWorkingSidebarProps {
   onSelectDocument: (id: string | null) => void;
   selectedDocumentId: string | null;
 }
 
-const AgentWorkspaceRightPanel = memo<AgentWorkspaceRightPanelProps>(
+const AgentWorkingSidebar = memo<AgentWorkingSidebarProps>(
   ({ onSelectDocument, selectedDocumentId }) => {
     const toggleRightPanel = useGlobalStore((s) => s.toggleRightPanel);
     const isDocumentMode = Boolean(selectedDocumentId);
@@ -61,4 +61,4 @@ const AgentWorkspaceRightPanel = memo<AgentWorkspaceRightPanelProps>(
   },
 );
 
-export default AgentWorkspaceRightPanel;
+export default AgentWorkingSidebar;

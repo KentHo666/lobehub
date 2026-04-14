@@ -7,7 +7,7 @@ import { useGlobalStore } from '@/store/global';
 import { initialState } from '@/store/global/initialState';
 
 import Conversation from '../index';
-import AgentWorkspaceRightPanel from './index';
+import AgentWorkingSidebar from './index';
 
 vi.mock('@/libs/swr', async (importOriginal) => {
   const actual = await importOriginal<typeof swr>();
@@ -64,8 +64,8 @@ vi.mock('react-i18next', () => ({
     t: (key: string) =>
       (
         ({
-          'agentWorkspace.resources': 'Resources',
-          'agentWorkspace.resources.empty': 'No agent documents yet',
+          'agentWorkingSidebar.resources': 'Resources',
+          'agentWorkingSidebar.resources.empty': 'No agent documents yet',
         }) as Record<string, string>
       )[key] || key,
   }),
@@ -147,7 +147,7 @@ describe('Conversation right panel mount', () => {
   });
 
   it('renders resources section and empty state', () => {
-    render(<AgentWorkspaceRightPanel selectedDocumentId={null} onSelectDocument={vi.fn()} />);
+    render(<AgentWorkingSidebar selectedDocumentId={null} onSelectDocument={vi.fn()} />);
 
     const resources = screen.getByTestId('workspace-resources');
 
@@ -156,7 +156,7 @@ describe('Conversation right panel mount', () => {
   });
 
   it('switches to document editor inside the right panel when a document is selected', () => {
-    render(<AgentWorkspaceRightPanel selectedDocumentId={'doc-1'} onSelectDocument={vi.fn()} />);
+    render(<AgentWorkingSidebar selectedDocumentId={'doc-1'} onSelectDocument={vi.fn()} />);
 
     expect(screen.getByTestId('right-panel')).toBeInTheDocument();
     expect(screen.getByTestId('workspace-document-panel')).toHaveTextContent('doc-1');

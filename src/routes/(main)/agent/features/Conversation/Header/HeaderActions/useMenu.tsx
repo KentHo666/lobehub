@@ -33,7 +33,7 @@ export const useMenu = (): { menuItems: DropdownItem[] } => {
       {
         icon: <Icon icon={PanelRightOpen} />,
         key: 'agent-workspace',
-        label: t('agentWorkspace.title'),
+        label: t('agentWorkingSidebar.title'),
         onClick: () => toggleRightPanel(),
       },
       {

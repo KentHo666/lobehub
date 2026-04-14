@@ -10,7 +10,7 @@ import { systemStatusSelectors } from '@/store/global/selectors';
 
 import ConversationArea from './ConversationArea';
 import ChatHeader from './Header';
-import AgentWorkspaceRightPanel from './RightPanel';
+import AgentWorkingSidebar from './WorkingSidebar';
 
 const wrapperStyle: React.CSSProperties = {
   height: '100%',
@@ -47,7 +47,7 @@ const ChatConversation = memo(() => {
               <ConversationArea />
             </TooltipGroup>
           </Flexbox>
-          <AgentWorkspaceRightPanel
+          <AgentWorkingSidebar
             selectedDocumentId={selectedDocumentId}
             onSelectDocument={setSelectedDocumentId}
           />
