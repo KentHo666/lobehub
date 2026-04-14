@@ -481,7 +481,7 @@ export const createAgentExecutors = (context: {
             ...error,
             body: {
               ...error.body,
-              traceId,
+              traceId: traceId ?? error.body?.traceId,
             },
           };
           const localizedError = localizeError(enrichedError);

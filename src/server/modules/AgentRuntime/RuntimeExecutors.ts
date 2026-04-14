@@ -9,6 +9,7 @@ import {
   type InstructionExecutor,
   UsageCounter,
 } from '@lobechat/agent-runtime';
+import { LobeActivatorIdentifier } from '@lobechat/builtin-tool-activator';
 import { LocalSystemManifest } from '@lobechat/builtin-tool-local-system';
 import {
   AGENT_DOCUMENT_INJECTION_POSITIONS,
@@ -16,6 +17,7 @@ import {
   buildStepSkillDelta,
   buildStepToolDelta,
   type LobeToolManifest,
+  type OnboardingContext,
   type OperationToolSet,
   type ResolvedToolSet,
   resolveTopicReferences,
@@ -37,12 +39,15 @@ import { serverMessagesEngine } from '@/server/modules/Mecha/ContextEngineering'
 import { type EvalContext } from '@/server/modules/Mecha/ContextEngineering/types';
 import { initModelRuntimeFromDB } from '@/server/modules/ModelRuntime';
 import { AgentDocumentsService } from '@/server/services/agentDocuments';
+import { FileService } from '@/server/services/file';
 import { MessageService } from '@/server/services/message';
+import { OnboardingService } from '@/server/services/onboarding';
 import {
   type ToolExecutionResultResponse,
   type ToolExecutionService,
 } from '@/server/services/toolExecution';
 
+import { dispatchClientTool } from './dispatchClientTool';
 import { classifyLLMError, type LLMErrorKind } from './llmErrorClassification';
 import { type IStreamEventManager } from './types';
 
@@ -84,6 +89,26 @@ const getToolFailureKind = (result: ToolExecutionResultResponse): ToolFailureKin
 
 const shouldRetryTool = (kind: ToolFailureKind | undefined, attempt: number, maxRetries: number) =>
   kind === 'retry' && attempt <= maxRetries;
+
+// Builds a postProcessUrl callback that resolves S3 keys in file-backed fields
+// (imageList, videoList, fileList) to absolute URLs. Must be passed to every
+// messageModel.query() call whose output is later fed to the LLM — otherwise
+// the provider layer receives raw keys like `files/user_xxx/icon.png` and
+// rejects them (see anthropic contextBuilder `Invalid image URL`).
+//
+// FileService is constructed lazily so environments without S3 config (unit
+// tests) don't fail at context-build time; failure returns undefined, which
+// leaves URLs as raw keys — same behavior as before this helper existed.
+const buildPostProcessUrl = (ctx: Pick<RuntimeExecutorContext, 'serverDB' | 'userId'>) => {
+  if (!ctx.userId || !ctx.serverDB) return undefined;
+  let fileService: FileService | undefined;
+  try {
+    fileService = new FileService(ctx.serverDB, ctx.userId);
+  } catch {
+    return undefined;
+  }
+  return (path: string | null) => fileService!.getFullFileUrl(path);
+};
 
 const shouldRetryLLM = (kind: LLMErrorKind, attempt: number, maxRetries: number) =>
   kind === 'retry' && attempt <= maxRetries;
@@ -145,6 +170,24 @@ const executeToolWithRetry = async (
   throw new Error('Tool execution retry loop exited unexpectedly');
 };
 
+const buildToolDiscoveryConfig = (operationToolSet: OperationToolSet, enabledToolIds: string[]) => {
+  const enabledToolSet = new Set(enabledToolIds);
+
+  if (!enabledToolSet.has(LobeActivatorIdentifier)) return undefined;
+
+  const availableTools = Object.entries(operationToolSet.manifestMap)
+    .filter(([identifier]) => !enabledToolSet.has(identifier))
+    .map(([identifier, manifest]) => ({
+      description: manifest.meta?.description || '',
+      identifier,
+      name: manifest.meta?.title || identifier,
+    }));
+
+  if (availableTools.length === 0) return undefined;
+
+  return { availableTools };
+};
+
 const formatErrorEventData = (error: unknown, phase: string) => {
   let errorMessage = 'Unknown error';
   let errorType: string | undefined;
@@ -195,7 +238,6 @@ export interface RuntimeExecutorContext {
   botPlatformContext?: any;
   discordContext?: any;
   evalContext?: EvalContext;
-  fileService?: any;
   loadAgentState?: (operationId: string) => Promise<AgentState | null>;
   messageModel: MessageModel;
   operationId: string;
@@ -229,6 +271,7 @@ export const createRuntimeExecutors = (
     const activeDeviceId = state.metadata?.activeDeviceId;
     const operationToolSet: OperationToolSet = state.operationToolSet ?? {
       enabledToolIds: [],
+      executorMap: state.toolExecutorMap ?? {},
       manifestMap: state.toolManifestMap ?? {},
       sourceMap: state.toolSourceMap ?? {},
       tools: state.tools ?? [],
@@ -250,6 +293,7 @@ export const createRuntimeExecutors = (
     );
 
     const tools = resolved.tools.length > 0 ? resolved.tools : undefined;
+    const toolDiscoveryConfig = buildToolDiscoveryConfig(operationToolSet, resolved.enabledToolIds);
 
     if (stepDelta.activatedTools.length > 0) {
       log(
@@ -309,8 +353,14 @@ export const createRuntimeExecutors = (
     }
 
     // Publish stream start event
+    const stepLabel = (instruction as any).stepLabel;
     await streamManager.publishStreamEvent(operationId, {
-      data: { assistantMessage: assistantMessageItem, model, provider },
+      data: {
+        assistantMessage: assistantMessageItem,
+        model,
+        provider,
+        ...(stepLabel && { stepLabel }),
+      },
       stepIndex,
       type: 'stream_start',
     });
@@ -343,11 +393,14 @@ export const createRuntimeExecutors = (
             async (topicId) => topicModel.findById(topicId),
             async (topicId) => {
               const topic = await topicModel.findById(topicId);
-              return messageModel.query({
-                agentId: topic?.agentId ?? undefined,
-                groupId: topic?.groupId ?? undefined,
-                topicId,
-              });
+              return messageModel.query(
+                {
+                  agentId: topic?.agentId ?? undefined,
+                  groupId: topic?.groupId ?? undefined,
+                  topicId,
+                },
+                { postProcessUrl: buildPostProcessUrl(ctx) },
+              );
             },
           );
         }
@@ -362,6 +415,7 @@ export const createRuntimeExecutors = (
             if (docs.length > 0) {
               agentDocuments = docs.map((doc) => ({
                 content: doc.content,
+                description: doc.description ?? undefined,
                 filename: doc.filename,
                 id: doc.id,
                 loadPosition: normalizeDocumentPosition(
@@ -369,6 +423,7 @@ export const createRuntimeExecutors = (
                 ),
                 loadRules: doc.loadRules,
                 policyId: doc.templateId,
+                policyLoad: doc.policyLoad as 'always' | 'progressive',
                 policyLoadFormat: doc.policy?.context?.policyLoadFormat || doc.policyLoadFormat,
                 title: doc.title,
               }));
@@ -379,9 +434,106 @@ export const createRuntimeExecutors = (
           }
         }
 
+        // Detect onboarding agent and build context injection
+        let onboardingContext: OnboardingContext | undefined;
+        const isOnboardingAgent =
+          agentConfig?.slug === 'web-onboarding' ||
+          resolved.enabledToolIds.includes('lobe-web-onboarding');
+        const alreadyHasOnboardingContext = (
+          llmPayload.messages as Array<{ content: string | unknown }>
+        ).some((message) => {
+          if (typeof message.content !== 'string') return false;
+
+          return (
+            message.content.includes('<onboarding_context>') ||
+            message.content.includes('<current_soul_document>') ||
+            message.content.includes('<current_user_persona>')
+          );
+        });
+
+        if (isOnboardingAgent && !alreadyHasOnboardingContext && ctx.serverDB && ctx.userId) {
+          try {
+            const { formatWebOnboardingStateMessage } =
+              await import('@lobechat/builtin-tool-web-onboarding/utils');
+            const onboardingService = new OnboardingService(ctx.serverDB, ctx.userId);
+            const onboardingState = await onboardingService.getState();
+            const phaseGuidance = formatWebOnboardingStateMessage(onboardingState);
+
+            // Fetch SOUL.md from inbox agent's documents
+            let soulContent: string | null = null;
+            try {
+              const inboxAgentId = await onboardingService.getInboxAgentId();
+              if (inboxAgentId) {
+                const docService = new AgentDocumentsService(ctx.serverDB, ctx.userId);
+                const soulDoc = await docService.getDocumentByFilename(inboxAgentId, 'SOUL.md');
+                soulContent = soulDoc?.content ?? null;
+              }
+            } catch (error) {
+              log('Failed to fetch SOUL.md for onboarding context: %O', error);
+            }
+
+            // Fetch user persona
+            let personaContent: string | null = null;
+            try {
+              const { UserPersonaModel } = await import('@/database/models/userMemory/persona');
+              const personaModel = new UserPersonaModel(ctx.serverDB, ctx.userId);
+              const persona = await personaModel.getLatestPersonaDocument();
+              personaContent = persona?.persona ?? null;
+            } catch (error) {
+              log('Failed to fetch user persona for onboarding context: %O', error);
+            }
+
+            onboardingContext = { personaContent, phaseGuidance, soulContent };
+            log('Built onboarding context for agent %s, phase: %s', agentId, onboardingState.phase);
+          } catch (error) {
+            log('Failed to build onboarding context: %O', error);
+          }
+        }
+
+        // Build additional placeholder variables for the lobehub builtin skill
+        // (`packages/builtin-skills/src/lobehub/content.ts`) so it can render
+        // `{{agent_id}}` / `{{agent_title}}` / `{{topic_id}}` etc. into the
+        // model's prompt without needing a separate context injector.
+        //
+        // - agent_title / agent_description: read directly from agentConfig,
+        //   which is the result of AgentModel.getAgentConfig() and already
+        //   contains the full enriched agent record (title, description, ...).
+        //   No extra query needed.
+        // - topic_title: requires a single primary-key lookup against the
+        //   topics table. Skipped when topicId is missing or the lookup fails
+        //   (best-effort, falls back to empty string so the template still
+        //   renders cleanly).
+        const lobehubSkillAgentId = state.metadata?.agentId;
+        const lobehubSkillTopicId = state.metadata?.topicId;
+        const lobehubSkillAgentMeta = state.metadata?.agentConfig as
+          | { description?: string | null; title?: string | null }
+          | undefined;
+
+        let lobehubSkillTopicTitle = '';
+        if (lobehubSkillTopicId && ctx.serverDB && ctx.userId) {
+          try {
+            const topicModelForLobehub = new TopicModel(ctx.serverDB, ctx.userId);
+            const topicRecord = await topicModelForLobehub.findById(lobehubSkillTopicId);
+            lobehubSkillTopicTitle = topicRecord?.title ?? '';
+          } catch (error) {
+            log('Failed to load topic title for lobehub skill placeholders: %O', error);
+          }
+        }
+
+        const lobehubSkillVariables: Record<string, string> = {
+          agent_id: lobehubSkillAgentId ?? '',
+          agent_title: lobehubSkillAgentMeta?.title ?? '',
+          agent_description: lobehubSkillAgentMeta?.description ?? '',
+          topic_id: lobehubSkillTopicId ?? '',
+          topic_title: lobehubSkillTopicTitle,
+        };
+
         const contextEngineInput = {
           agentDocuments,
-          additionalVariables: state.metadata?.deviceSystemInfo,
+          additionalVariables: {
+            ...state.metadata?.deviceSystemInfo,
+            ...lobehubSkillVariables,
+          },
           userTimezone: ctx.userTimezone,
           capabilities: {
             isCanUseFC: (m: string, p: string) => {
@@ -428,6 +580,7 @@ export const createRuntimeExecutors = (
           model,
           provider,
           systemRole: agentConfig.systemRole ?? undefined,
+          toolDiscoveryConfig,
           toolsConfig: {
             manifests: Object.values(resolved.manifestMap),
             tools: resolved.enabledToolIds,
@@ -441,6 +594,7 @@ export const createRuntimeExecutors = (
 
           // Topic reference summaries
           ...(topicReferences && { topicReferences }),
+          ...(onboardingContext && { onboardingContext }),
         };
 
         processedMessages = await serverMessagesEngine(contextEngineInput);
@@ -640,9 +794,10 @@ export const createRuntimeExecutors = (
               },
               onToolsCalling: async ({ toolsCalling: raw }) => {
                 const resolvedCalls = new ToolNameResolver().resolve(raw, resolved.manifestMap);
-                // Add source field from resolved sourceMap for routing tool execution
+                // Attach source (origin) and executor (dispatch target) for routing
                 const payload = resolvedCalls.map((p) => ({
                   ...p,
+                  executor: resolved.executorMap?.[p.identifier],
                   source: resolved.sourceMap[p.identifier],
                 }));
                 // log(`[${operationLogId}][toolsCalling]`, payload);
@@ -728,6 +883,7 @@ export const createRuntimeExecutors = (
             data: {
               finalContent: content,
               grounding,
+              ...(stepLabel && { stepLabel }),
               imageList: imageList.length > 0 ? imageList : undefined,
               reasoning: thinkingContent || undefined,
               toolsCalling,
@@ -785,6 +941,7 @@ export const createRuntimeExecutors = (
 
           newState.messages.push({
             content,
+            reasoning: finalReasoning,
             role: 'assistant',
             tool_calls: tool_calls.length > 0 ? tool_calls : undefined,
           });
@@ -801,6 +958,12 @@ export const createRuntimeExecutors = (
 
             newState.usage = usage;
             if (cost) newState.cost = cost;
+          }
+
+          // Propagate stepLabel from instruction to state metadata for hook consumers
+          if (stepLabel) {
+            if (!newState.metadata) newState.metadata = {};
+            newState.metadata._stepLabel = stepLabel;
           }
 
           return {
@@ -920,11 +1083,14 @@ export const createRuntimeExecutors = (
     }
 
     try {
-      const dbMessages = await ctx.messageModel.query({
-        agentId: state.metadata?.agentId,
-        threadId: state.metadata?.threadId,
-        topicId,
-      });
+      const dbMessages = await ctx.messageModel.query(
+        {
+          agentId: state.metadata?.agentId,
+          threadId: state.metadata?.threadId,
+          topicId,
+        },
+        { postProcessUrl: buildPostProcessUrl(ctx) },
+      );
 
       const messageIds = dbMessages
         .filter(
@@ -1207,28 +1373,45 @@ export const createRuntimeExecutors = (
         ),
       };
 
-      // Execute tool using ToolExecutionService
-      log(`[${operationLogId}] Executing tool ${toolName} ...`);
-      const execution = await executeToolWithRetry(
-        () =>
-          toolExecutionService.executeTool(chatToolPayload, {
-            activeDeviceId: state.metadata?.activeDeviceId,
-            agentId: state.metadata?.agentId,
-            memoryToolPermission: agentConfig?.chatConfig?.memory?.toolPermission,
-            serverDB: ctx.serverDB,
-            taskId: state.metadata?.taskId,
-            toolManifestMap: effectiveManifestMap,
-            toolResultMaxLength,
-            topicId: ctx.topicId,
-            userId: ctx.userId,
-          }),
-        {
-          isInterrupted: () => isOperationInterrupted(ctx),
-          maxRetries: TOOL_MAX_RETRIES,
-          operationLogId,
-          toolName,
-        },
-      );
+      // Route to client via Agent Gateway WS when the tool is marked
+      // executor='client' and the current stream manager can reach a gateway.
+      // Falls through to the normal server path if either is unavailable.
+      const canDispatchToClient =
+        chatToolPayload.executor === 'client' &&
+        typeof streamManager.sendToolExecute === 'function';
+
+      let execution: { result: ToolExecutionResultResponse; attempts: number };
+      if (canDispatchToClient) {
+        log(`[${operationLogId}] Dispatching tool ${toolName} to client via Agent Gateway`);
+        const dispatchResult = await dispatchClientTool(chatToolPayload, {
+          operationId,
+          streamManager,
+        });
+        execution = { attempts: 1, result: dispatchResult };
+      } else {
+        // Execute tool using ToolExecutionService
+        log(`[${operationLogId}] Executing tool ${toolName} ...`);
+        execution = await executeToolWithRetry(
+          () =>
+            toolExecutionService.executeTool(chatToolPayload, {
+              activeDeviceId: state.metadata?.activeDeviceId,
+              agentId: state.metadata?.agentId,
+              memoryToolPermission: agentConfig?.chatConfig?.memory?.toolPermission,
+              serverDB: ctx.serverDB,
+              taskId: state.metadata?.taskId,
+              toolManifestMap: effectiveManifestMap,
+              toolResultMaxLength,
+              topicId: ctx.topicId,
+              userId: ctx.userId,
+            }),
+          {
+            isInterrupted: () => isOperationInterrupted(ctx),
+            maxRetries: TOOL_MAX_RETRIES,
+            operationLogId,
+            toolName,
+          },
+        );
+      }
 
       const executionResult = execution.result;
       const executionTime = executionResult.executionTime;
@@ -1487,26 +1670,40 @@ export const createRuntimeExecutors = (
 
           const batchAgentConfig = state.metadata?.agentConfig;
 
-          const execution = await executeToolWithRetry(
-            () =>
-              toolExecutionService.executeTool(chatToolPayload, {
-                activeDeviceId: state.metadata?.activeDeviceId,
-                agentId: state.metadata?.agentId,
-                memoryToolPermission: batchAgentConfig?.chatConfig?.memory?.toolPermission,
-                serverDB: ctx.serverDB,
-                taskId: state.metadata?.taskId,
-                toolManifestMap: batchManifestMap,
-                toolResultMaxLength: batchAgentConfig?.chatConfig?.toolResultMaxLength,
-                topicId: ctx.topicId,
-                userId: ctx.userId,
-              }),
-            {
-              isInterrupted: () => isOperationInterrupted(ctx),
-              maxRetries: TOOL_MAX_RETRIES,
-              operationLogId,
-              toolName,
-            },
-          );
+          const canDispatchToClient =
+            chatToolPayload.executor === 'client' &&
+            typeof streamManager.sendToolExecute === 'function';
+
+          let execution: { result: ToolExecutionResultResponse; attempts: number };
+          if (canDispatchToClient) {
+            log(`[${operationLogId}] Dispatching tool ${toolName} to client via Agent Gateway`);
+            const dispatchResult = await dispatchClientTool(chatToolPayload, {
+              operationId,
+              streamManager,
+            });
+            execution = { attempts: 1, result: dispatchResult };
+          } else {
+            execution = await executeToolWithRetry(
+              () =>
+                toolExecutionService.executeTool(chatToolPayload, {
+                  activeDeviceId: state.metadata?.activeDeviceId,
+                  agentId: state.metadata?.agentId,
+                  memoryToolPermission: batchAgentConfig?.chatConfig?.memory?.toolPermission,
+                  serverDB: ctx.serverDB,
+                  taskId: state.metadata?.taskId,
+                  toolManifestMap: batchManifestMap,
+                  toolResultMaxLength: batchAgentConfig?.chatConfig?.toolResultMaxLength,
+                  topicId: ctx.topicId,
+                  userId: ctx.userId,
+                }),
+              {
+                isInterrupted: () => isOperationInterrupted(ctx),
+                maxRetries: TOOL_MAX_RETRIES,
+                operationLogId,
+                toolName,
+              },
+            );
+          }
 
           const executionResult = execution.result;
           const executionTime = executionResult.executionTime;
@@ -1645,11 +1842,17 @@ export const createRuntimeExecutors = (
     // Query latest messages from database
     // Must pass agentId to ensure correct query scope, otherwise when topicId is undefined,
     // the query will use isNull(topicId) condition which won't find messages with actual topicId
-    const latestMessages = await ctx.messageModel.query({
-      agentId: state.metadata?.agentId,
-      threadId: state.metadata?.threadId,
-      topicId: state.metadata?.topicId,
-    });
+    //
+    // postProcessUrl resolves S3 keys in imageList/videoList/fileList to absolute URLs;
+    // without it the next LLM call sees raw keys and providers reject them.
+    const latestMessages = await ctx.messageModel.query(
+      {
+        agentId: state.metadata?.agentId,
+        threadId: state.metadata?.threadId,
+        topicId: state.metadata?.topicId,
+      },
+      { postProcessUrl: buildPostProcessUrl(ctx) },
+    );
 
     // Use conversation-flow parse to resolve branching into linear flat list
     // parse() handles assistantGroup, compare, supervisor, etc. virtual message types
@@ -1725,6 +1928,16 @@ export const createRuntimeExecutors = (
     const { operationId, stepIndex, streamManager } = ctx;
 
     log('[%s:%d] Finishing execution: (%s)', operationId, stepIndex, reason);
+
+    // Clear runningOperation from topic metadata so reconnect doesn't trigger after completion
+    if (ctx.topicId && ctx.userId) {
+      try {
+        const topicModel = new TopicModel(ctx.serverDB, ctx.userId);
+        await topicModel.updateMetadata(ctx.topicId, { runningOperation: null });
+      } catch (e) {
+        log('[%s] Failed to clear runningOperation metadata: %O', operationId, e);
+      }
+    }
 
     // Publish execution complete event
     await streamManager.publishStreamEvent(operationId, {

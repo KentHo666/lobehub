@@ -287,6 +287,53 @@ describe('RuntimeExecutors', () => {
       );
     });
 
+    it('should preserve reasoning in newState when assistant returns tool calls', async () => {
+      const toolCallPayload = [
+        {
+          function: { arguments: '{}', name: 'search' },
+          id: 'call_1',
+          type: 'function',
+        },
+      ];
+
+      const mockChat = vi.fn().mockImplementation(async (_payload, options) => {
+        await options?.callback?.onThinking?.('Need to inspect the search results first.');
+        await options?.callback?.onToolsCalling?.({ toolsCalling: toolCallPayload });
+        await options?.callback?.onCompletion?.({
+          usage: {
+            totalInputTokens: 1,
+            totalOutputTokens: 2,
+            totalTokens: 3,
+          },
+        });
+        return new Response('done');
+      });
+      vi.mocked(initModelRuntimeFromDB).mockResolvedValueOnce({ chat: mockChat } as any);
+
+      const executors = createRuntimeExecutors(ctx);
+      const state = createMockState();
+
+      const instruction = {
+        payload: {
+          messages: [{ content: 'Hello', role: 'user' }],
+          model: 'gpt-4',
+          provider: 'openai',
+          tools: [],
+        },
+        type: 'call_llm' as const,
+      };
+
+      const result = await executors.call_llm!(instruction, state);
+
+      expect(result.newState.messages.at(-1)).toEqual(
+        expect.objectContaining({
+          reasoning: { content: 'Need to inspect the search results first.' },
+          role: 'assistant',
+          tool_calls: [expect.objectContaining({ id: 'call_1' })],
+        }),
+      );
+    });
+
     it('should execute compress_context and return compression_result', async () => {
       const mockChat = vi.fn().mockImplementation(async (_payload, options) => {
         await options?.callback?.onText?.('summary');
@@ -1156,6 +1203,40 @@ describe('RuntimeExecutors', () => {
         const callArgs = engineSpy.mock.calls[0][0];
         expect(callArgs).not.toHaveProperty('topicReferences');
       });
+
+      it('should skip rebuilding onboarding context when messages already contain onboarding injection', async () => {
+        const ctxWithConfig: RuntimeExecutorContext = {
+          ...ctx,
+          agentConfig: {
+            plugins: ['lobe-web-onboarding'],
+            slug: 'web-onboarding',
+            systemRole: 'test',
+          } as any,
+        };
+        const executors = createRuntimeExecutors(ctxWithConfig);
+        const state = createMockState();
+
+        const instruction = {
+          payload: {
+            messages: [
+              {
+                content:
+                  '<onboarding_context>\n<phase>existing</phase>\n</onboarding_context>\nHello',
+                role: 'user',
+              },
+            ],
+            model: 'gpt-4',
+            provider: 'openai',
+          },
+          type: 'call_llm' as const,
+        };
+
+        await executors.call_llm!(instruction, state);
+
+        expect(engineSpy).toHaveBeenCalledTimes(1);
+        const callArgs = engineSpy.mock.calls[0][0];
+        expect(callArgs).not.toHaveProperty('onboardingContext');
+      });
     });
   });
 
@@ -1690,11 +1771,14 @@ describe('RuntimeExecutors', () => {
       const result = await executors.call_tools_batch!(instruction, state);
 
       // Should query messages from database with agentId, threadId, and topicId
-      expect(mockMessageModel.query).toHaveBeenCalledWith({
-        agentId: 'agent-123',
-        threadId: 'thread-123',
-        topicId: 'topic-123',
-      });
+      expect(mockMessageModel.query).toHaveBeenCalledWith(
+        {
+          agentId: 'agent-123',
+          threadId: 'thread-123',
+          topicId: 'topic-123',
+        },
+        expect.any(Object),
+      );
 
       // Messages should be refreshed from database (4 messages from mock)
       expect(result.newState.messages).toHaveLength(4);
@@ -2018,11 +2102,14 @@ describe('RuntimeExecutors', () => {
       await executors.call_tools_batch!(instruction, state);
 
       // Should query messages with agentId, threadId, and topicId from state.metadata
-      expect(mockMessageModel.query).toHaveBeenCalledWith({
-        agentId: 'agent-abc',
-        threadId: 'thread-xyz',
-        topicId: 'topic-abc-123',
-      });
+      expect(mockMessageModel.query).toHaveBeenCalledWith(
+        {
+          agentId: 'agent-abc',
+          threadId: 'thread-xyz',
+          topicId: 'topic-abc-123',
+        },
+        expect.any(Object),
+      );
     });
 
     // LOBE-5143: After DB refresh, state.messages stores raw UIChatMessage[]
@@ -2154,11 +2241,14 @@ describe('RuntimeExecutors', () => {
       const result = await executors.call_tools_batch!(instruction, state);
 
       // Verify agentId is passed in the query
-      expect(mockMessageModel.query).toHaveBeenCalledWith({
-        agentId: 'agent-123',
-        threadId: 'thread-123',
-        topicId: undefined,
-      });
+      expect(mockMessageModel.query).toHaveBeenCalledWith(
+        {
+          agentId: 'agent-123',
+          threadId: 'thread-123',
+          topicId: undefined,
+        },
+        expect.any(Object),
+      );
 
       // Expected: newState.messages should NOT be empty
       // The next call_llm step needs messages to work properly

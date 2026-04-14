@@ -2,10 +2,16 @@ import { TaskIdentifier as TaskSkillIdentifier } from '@lobechat/builtin-skills'
 import { BriefIdentifier } from '@lobechat/builtin-tool-brief';
 import { NotebookIdentifier } from '@lobechat/builtin-tool-notebook';
 import { buildTaskRunPrompt } from '@lobechat/prompts';
-import type { TaskTopicHandoff, WorkspaceData } from '@lobechat/types';
+import type {
+  TaskListItem,
+  TaskParticipant,
+  TaskTopicHandoff,
+  WorkspaceData,
+} from '@lobechat/types';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import { AgentModel } from '@/database/models/agent';
 import { BriefModel } from '@/database/models/brief';
 import { TaskModel } from '@/database/models/task';
 import { TaskTopicModel } from '@/database/models/taskTopic';
@@ -21,6 +27,7 @@ const taskProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
   return opts.next({
     ctx: {
+      agentModel: new AgentModel(ctx.serverDB, ctx.userId),
       briefModel: new BriefModel(ctx.serverDB, ctx.userId),
       taskLifecycle: new TaskLifecycleService(ctx.serverDB, ctx.userId),
       taskModel: new TaskModel(ctx.serverDB, ctx.userId),
@@ -66,6 +73,22 @@ const listSchema = z.object({
   offset: z.number().min(0).default(0),
   parentTaskId: z.string().nullable().optional(),
   status: z.string().optional(),
+});
+
+const groupListSchema = z.object({
+  assigneeAgentId: z.string().optional(),
+  groups: z
+    .array(
+      z.object({
+        key: z.string(),
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+        statuses: z.array(z.string()).min(1).max(10),
+      }),
+    )
+    .min(1)
+    .max(10),
+  parentTaskId: z.string().nullable().optional(),
 });
 
 // Helper: build task prompt with handoff context from previous topics
@@ -686,11 +709,50 @@ export const taskRouter = router({
     }
   }),
 
+  groupList: taskProcedure.input(groupListSchema).query(async ({ input, ctx }) => {
+    try {
+      const model = ctx.taskModel;
+      const groups = await model.groupList(input);
+      return { data: groups, success: true };
+    } catch (error) {
+      console.error('[task:groupList]', error);
+      throw new TRPCError({
+        cause: error,
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to fetch grouped tasks',
+      });
+    }
+  }),
+
   list: taskProcedure.input(listSchema).query(async ({ input, ctx }) => {
     try {
       const model = ctx.taskModel;
       const result = await model.list(input);
-      return { data: result.tasks, success: true, total: result.total };
+
+      const assigneeIds = [
+        ...new Set(result.tasks.map((t) => t.assigneeAgentId).filter((id): id is string => !!id)),
+      ];
+      const agents =
+        assigneeIds.length > 0 ? await ctx.agentModel.getAgentAvatarsByIds(assigneeIds) : [];
+      const agentMap = new Map(agents.map((a) => [a.id, a]));
+
+      const data: TaskListItem[] = result.tasks.map((task) => {
+        const participants: TaskParticipant[] = [];
+        if (task.assigneeAgentId) {
+          const agent = agentMap.get(task.assigneeAgentId);
+          if (agent) {
+            participants.push({
+              avatar: agent.avatar,
+              id: agent.id,
+              name: agent.title ?? '',
+              type: 'agent',
+            });
+          }
+        }
+        return { ...task, participants };
+      });
+
+      return { data, success: true, total: result.total };
     } catch (error) {
       console.error('[task:list]', error);
       throw new TRPCError({
@@ -1167,6 +1229,27 @@ export const taskRouter = router({
     }
   }),
 
+  updateConfig: taskProcedure
+    .input(idInput.merge(z.object({ config: z.record(z.unknown()) })))
+    .mutation(async ({ input, ctx }) => {
+      const { id, config } = input;
+      try {
+        const model = ctx.taskModel;
+        const resolved = await resolveOrThrow(model, id);
+        const task = await model.updateTaskConfig(resolved.id, config);
+        if (!task) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' });
+        return { data: task, message: 'Config updated', success: true };
+      } catch (error) {
+        if (error instanceof TRPCError) throw error;
+        console.error('[task:updateConfig]', error);
+        throw new TRPCError({
+          cause: error,
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update task config',
+        });
+      }
+    }),
+
   updateStatus: taskProcedure
     .input(
       z.object({
@@ -1180,6 +1263,31 @@ export const taskRouter = router({
       try {
         const model = ctx.taskModel;
         const resolved = await resolveOrThrow(model, id);
+
+        // Cascade: when leaving `running`, cancel all running topics
+        if (resolved.status === 'running' && status !== 'running') {
+          const topics = await ctx.taskTopicModel.findByTaskId(resolved.id);
+          const aiAgentService = new AiAgentService(ctx.serverDB, ctx.userId);
+
+          for (const t of topics) {
+            if (t.status !== 'running' || !t.topicId) continue;
+
+            // Interrupt the remote operation first; if it fails, skip cancellation
+            // to avoid desynchronizing DB state from a still-running operation.
+            if (t.operationId) {
+              try {
+                await aiAgentService.interruptTask({ operationId: t.operationId });
+              } catch (err) {
+                console.error('[task:updateStatus] failed to interrupt topic %s:', t.topicId, err);
+                continue;
+              }
+            }
+
+            // Conditionally cancel only if the topic is still running,
+            // avoiding overwrite of a concurrent completed/timeout transition.
+            await ctx.taskTopicModel.cancelIfRunning(resolved.id, t.topicId);
+          }
+        }
 
         const extra: Record<string, unknown> = {};
         if (status === 'running') extra.startedAt = new Date();
