@@ -6,8 +6,8 @@ import type {
 import { ModelIcon } from '@lobehub/icons';
 import { ChevronDownIcon, XIcon } from 'lucide-react';
 import type {
-  CSSProperties,
   ChangeEvent as ReactChangeEvent,
+  CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
 } from 'react';
@@ -27,6 +27,7 @@ import { computeDockPosition, connectorPoint, type DockResult, type Rect } from 
 
 export interface ChatPanelSelection {
   dataUrl: string;
+  id: string;
   label: string;
   rect: Rect;
 }
@@ -36,7 +37,7 @@ export interface ChatPanelSubmitPayload {
   modelId?: string;
   prompt: string;
   provider?: string;
-  selection: ChatPanelSelection;
+  selections: ChatPanelSelection[];
 }
 
 export interface ChatPanelProps {
@@ -45,9 +46,10 @@ export interface ChatPanelProps {
   hidden?: boolean;
   modelId?: string;
   models?: ScreenCaptureModelOption[];
-  onClearSelection: () => void;
+  onRemoveSelection: (selectionId: string) => void;
   onSubmit: (payload: ChatPanelSubmitPayload) => void;
-  selection: ChatPanelSelection | null;
+  placementResetKey?: number;
+  selections: ChatPanelSelection[];
   theme?: ScreenCaptureOverlayTheme;
   viewportHeight: number;
   viewportWidth: number;
@@ -60,12 +62,15 @@ const SendIcon = () => (
   <svg
     aria-hidden="true"
     fill="currentColor"
+    fillRule="evenodd"
     focusable="false"
     height={14}
+    style={{ flex: 'none', lineHeight: 1 }}
     viewBox="0 0 14 14"
     width={14}
+    xmlns="http://www.w3.org/2000/svg"
   >
-    <path d="M13.55 0.45a.7.7 0 0 1 .16.76l-4.8 12a.7.7 0 0 1-1.27.06L5.5 8.5 0.73 6.36a.7.7 0 0 1 .06-1.3l12-4.77a.7.7 0 0 1 .76.16Z" />
+    <path d="M.743 3.773c-.818-.555-.422-1.834.567-1.828l11.496.074a1 1 0 01.837 1.538l-6.189 9.689c-.532.833-1.822.47-1.842-.518L5.525 8.51a1 1 0 01.522-.9l1.263-.686a.808.808 0 00-.772-1.42l-1.263.686a1 1 0 01-1.039-.051L.743 3.773z" />
   </svg>
 );
 
@@ -76,9 +81,10 @@ const ChatPanel = memo<ChatPanelProps>(
     hidden = false,
     modelId: initialModelId,
     models,
-    onClearSelection,
+    onRemoveSelection,
     onSubmit,
-    selection,
+    placementResetKey = 0,
+    selections,
     theme,
     viewportHeight,
     viewportWidth,
@@ -87,9 +93,12 @@ const ChatPanel = memo<ChatPanelProps>(
     const [agentId, setAgentId] = useState<string | undefined>(initialAgentId);
     const [modelId, setModelId] = useState<string | undefined>(initialModelId);
     const lastSelectionPlacementRef = useRef<PanelPlacement | null>(null);
+    const lastPlacementResetKeyRef = useRef(placementResetKey);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-    const selected = !!selection;
+    const selectionCount = selections.length;
+    const activeSelection = selectionCount > 0 ? selections[selectionCount - 1]! : null;
+    const selected = selectionCount > 0;
 
     const currentAgent = useMemo(
       () => agents?.find((item) => item.id === agentId),
@@ -142,18 +151,22 @@ const ChatPanel = memo<ChatPanelProps>(
       () => createInitialPanelPlacement(viewportWidth, viewportHeight),
       [viewportWidth, viewportHeight],
     );
+    const dockPanelHeight =
+      selectionCount > 1
+        ? OVERLAY_LAYOUT.panelHeightEstimateExpanded
+        : OVERLAY_LAYOUT.panelHeightEstimate;
 
     const dock: DockResult | null = useMemo(() => {
-      if (!selection) return null;
+      if (!activeSelection) return null;
       return computeDockPosition({
         gap: OVERLAY_LAYOUT.dockGap,
-        panelHeight: OVERLAY_LAYOUT.panelHeightEstimate,
+        panelHeight: dockPanelHeight,
         panelWidth: OVERLAY_LAYOUT.panelWidthDocked,
-        rect: selection.rect,
+        rect: activeSelection.rect,
         viewportHeight,
         viewportWidth,
       });
-    }, [selection, viewportWidth, viewportHeight]);
+    }, [activeSelection, dockPanelHeight, viewportWidth, viewportHeight]);
 
     const dockedPlacement: PanelPlacement | null = dock ? createDockedPanelPlacement(dock) : null;
 
@@ -163,6 +176,11 @@ const ChatPanel = memo<ChatPanelProps>(
       }
     }, [dockedPlacement]);
 
+    if (lastPlacementResetKeyRef.current !== placementResetKey) {
+      lastSelectionPlacementRef.current = null;
+      lastPlacementResetKeyRef.current = placementResetKey;
+    }
+
     const placement = resolvePanelPlacement({
       dockedPlacement,
       initialPlacement,
@@ -170,13 +188,13 @@ const ChatPanel = memo<ChatPanelProps>(
     });
 
     const connector = useMemo(() => {
-      if (!selection || !dock || dock.side === 'edge') return null;
-      const pt = connectorPoint(selection.rect, dock.side);
+      if (!activeSelection || !dock || dock.side === 'edge') return null;
+      const pt = connectorPoint(activeSelection.rect, dock.side);
       return {
         left: pt.x - OVERLAY_LAYOUT.connectorSize / 2,
         top: pt.y - OVERLAY_LAYOUT.connectorSize / 2,
       };
-    }, [selection, dock]);
+    }, [activeSelection, dock]);
 
     const themeStyle = useMemo<CSSProperties | undefined>(() => {
       if (!theme) return undefined;
@@ -212,15 +230,15 @@ const ChatPanel = memo<ChatPanelProps>(
     }, [selected]);
 
     const submit = useCallback(() => {
-      if (!selection || !prompt.trim()) return;
+      if (selections.length === 0 || !prompt.trim()) return;
       onSubmit({
         agentId,
         modelId,
         prompt: prompt.trim(),
         provider: currentModel?.provider,
-        selection,
+        selections,
       });
-    }, [selection, prompt, agentId, modelId, currentModel, onSubmit]);
+    }, [selections, prompt, agentId, modelId, currentModel, onSubmit]);
 
     const handleKeyDown = useCallback(
       (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -249,12 +267,12 @@ const ChatPanel = memo<ChatPanelProps>(
       <>
         {connector && (
           <div
+            style={{ ...themeStyle, left: connector.left, top: connector.top }}
             className={cn(
               styles.connector,
               selected && styles.connectorVisible,
               hidden && styles.connectorHidden,
             )}
-            style={{ ...(themeStyle || {}), left: connector.left, top: connector.top }}
           />
         )}
         <div
@@ -265,7 +283,7 @@ const ChatPanel = memo<ChatPanelProps>(
             hidden && styles.panelHidden,
           )}
           style={{
-            ...(themeStyle || {}),
+            ...themeStyle,
             cursor: 'default',
             left: placement.left,
             top: placement.top,
@@ -275,27 +293,73 @@ const ChatPanel = memo<ChatPanelProps>(
           onMouseMove={(e: ReactMouseEvent<HTMLDivElement>) => e.stopPropagation()}
           onMouseUp={(e: ReactMouseEvent<HTMLDivElement>) => e.stopPropagation()}
         >
-          {selection && (
+          {selectionCount === 1 && activeSelection && (
             <div className={styles.selectionSummary}>
               <div
                 aria-label="screenshot thumbnail"
                 className={styles.thumb}
-                style={{ backgroundImage: `url(${selection.dataUrl})` }}
+                style={{ backgroundImage: `url(${activeSelection.dataUrl})` }}
               />
               <div className={styles.summaryText}>
                 <div className={styles.summaryTitle}>
-                  {OVERLAY_COPY.screenshotLabel} · {selection.label}
+                  {OVERLAY_COPY.screenshotLabel} · {activeSelection.label}
                 </div>
-                <div className={styles.summaryMeta}>{formatBytes(selection.rect)}</div>
+                <div className={styles.summaryMeta}>{formatBytes(activeSelection.rect)}</div>
               </div>
               <button
                 aria-label={OVERLAY_COPY.removeSelectionLabel}
                 className={styles.iconBtn}
                 type="button"
-                onClick={onClearSelection}
+                onClick={() => onRemoveSelection(activeSelection.id)}
               >
                 <XIcon size={14} strokeWidth={2} />
               </button>
+            </div>
+          )}
+
+          {selectionCount > 1 && activeSelection && (
+            <div className={styles.multiSelectionSummary}>
+              <div className={styles.multiSelectionHeader}>
+                <div className={styles.multiSelectionTitle}>
+                  {selectionCount} {OVERLAY_COPY.screenshotsLabel}
+                </div>
+                <div className={styles.multiSelectionMeta}>
+                  {OVERLAY_COPY.latestSelectionLabel} · {activeSelection.label}
+                </div>
+              </div>
+
+              <div className={styles.multiSelectionRail}>
+                {selections.map((item) => {
+                  const isActive = item.id === activeSelection.id;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        styles.multiSelectionItem,
+                        isActive && styles.multiSelectionItemActive,
+                      )}
+                    >
+                      <div className={styles.multiSelectionThumbFrame}>
+                        <div
+                          aria-label="screenshot thumbnail"
+                          className={styles.multiSelectionThumb}
+                          style={{ backgroundImage: `url(${item.dataUrl})` }}
+                        />
+                        <button
+                          aria-label={OVERLAY_COPY.removeSelectionLabel}
+                          className={styles.multiSelectionRemoveBtn}
+                          type="button"
+                          onClick={() => onRemoveSelection(item.id)}
+                        >
+                          <XIcon size={12} strokeWidth={2} />
+                        </button>
+                      </div>
+                      <div className={styles.multiSelectionItemLabel}>{item.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -307,7 +371,11 @@ const ChatPanel = memo<ChatPanelProps>(
               spellCheck={false}
               value={prompt}
               placeholder={
-                selected ? OVERLAY_COPY.selectedPlaceholder : OVERLAY_COPY.idlePlaceholder
+                selected
+                  ? selectionCount > 1
+                    ? OVERLAY_COPY.multipleSelectedPlaceholder
+                    : OVERLAY_COPY.selectedPlaceholder
+                  : OVERLAY_COPY.idlePlaceholder
               }
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}

@@ -4,7 +4,7 @@ export interface PendingOverlayDispatch {
   agentId: string;
   dispatchId: string;
   prompt: string;
-  screenshotFileName: string;
+  screenshotFileNames: string[];
 }
 
 interface CanConsumePendingOverlayDispatchParams {
@@ -21,8 +21,10 @@ interface SelectPendingOverlayDispatchFilesParams {
   pendingDispatch: PendingOverlayDispatch;
 }
 
-export const createOverlayScreenshotFilename = (dispatchId: string) =>
-  `screen-capture-${dispatchId}.png`;
+export const createOverlayScreenshotFilename = (dispatchId: string, index = 0) =>
+  `screen-capture-${dispatchId}-${index + 1}.png`;
+
+export const createOverlayDispatchScreenshotFilename = createOverlayScreenshotFilename;
 
 export const canConsumePendingOverlayDispatch = ({
   agentId,
@@ -44,5 +46,11 @@ export const canConsumePendingOverlayDispatch = ({
 export const selectPendingOverlayDispatchFiles = ({
   fileList,
   pendingDispatch,
-}: SelectPendingOverlayDispatchFilesParams) =>
-  fileList.filter((file) => file.file?.name === pendingDispatch.screenshotFileName);
+}: SelectPendingOverlayDispatchFilesParams) => {
+  const fileMap = new Map(fileList.map((file) => [file.file?.name, file] as const));
+
+  return pendingDispatch.screenshotFileNames.flatMap((fileName) => {
+    const file = fileMap.get(fileName);
+    return file ? [file] : [];
+  });
+};

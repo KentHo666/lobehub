@@ -148,7 +148,7 @@ export class ScreenCaptureManager {
 
   async handleSubmit(params: ScreenCaptureSubmitParams): Promise<void> {
     logger.info(
-      `Submit capture — promptLen=${params.prompt.length} size=${params.rect.width}x${params.rect.height} agentId=${params.agentId ?? '-'} modelId=${params.modelId ?? '-'}`,
+      `Submit capture — promptLen=${params.prompt.length} captures=${params.captures.length} agentId=${params.agentId ?? '-'} modelId=${params.modelId ?? '-'}`,
     );
 
     // Close the overlay first so focus transfers cleanly to the main window.

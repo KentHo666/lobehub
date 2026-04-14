@@ -4,7 +4,7 @@ import { type UploadFileItem } from '@/types/files/upload';
 
 import {
   canConsumePendingOverlayDispatch,
-  createOverlayScreenshotFilename,
+  createOverlayDispatchScreenshotFilename,
   selectPendingOverlayDispatchFiles,
 } from './overlayDispatch';
 
@@ -20,7 +20,7 @@ describe('overlayDispatch', () => {
             agentId: 'agent-1',
             dispatchId: 'dispatch-1',
             prompt: 'hello',
-            screenshotFileName: 'screen-capture-dispatch-1.png',
+            screenshotFileNames: ['screen-capture-dispatch-1-1.png'],
           },
           routeAgentId: 'agent-1',
           topicId: null,
@@ -38,7 +38,7 @@ describe('overlayDispatch', () => {
             agentId: 'agent-1',
             dispatchId: 'dispatch-1',
             prompt: 'hello',
-            screenshotFileName: 'screen-capture-dispatch-1.png',
+            screenshotFileNames: ['screen-capture-dispatch-1-1.png'],
           },
           routeAgentId: 'agent-1',
           topicId: 'topic-1',
@@ -56,7 +56,7 @@ describe('overlayDispatch', () => {
             agentId: 'agent-1',
             dispatchId: 'dispatch-1',
             prompt: 'hello',
-            screenshotFileName: 'screen-capture-dispatch-1.png',
+            screenshotFileNames: ['screen-capture-dispatch-1-1.png'],
           },
           routeAgentId: 'agent-2',
           topicId: null,
@@ -66,14 +66,22 @@ describe('overlayDispatch', () => {
   });
 
   describe('selectPendingOverlayDispatchFiles', () => {
-    it('keeps only files created by the overlay dispatch', () => {
+    it('keeps only files created by the overlay dispatch and preserves capture order', () => {
+      const firstFileName = createOverlayDispatchScreenshotFilename('dispatch-1', 0);
+      const secondFileName = createOverlayDispatchScreenshotFilename('dispatch-1', 1);
       const fileList = [
-        { file: new File(['a'], 'existing.png', { type: 'image/png' }), id: 'existing' },
         {
-          file: new File(['b'], createOverlayScreenshotFilename('dispatch-1'), {
+          file: new File(['b'], secondFileName, {
             type: 'image/png',
           }),
-          id: 'overlay',
+          id: 'overlay-2',
+        },
+        { file: new File(['a'], 'existing.png', { type: 'image/png' }), id: 'existing' },
+        {
+          file: new File(['c'], firstFileName, {
+            type: 'image/png',
+          }),
+          id: 'overlay-1',
         },
       ] as UploadFileItem[];
 
@@ -84,10 +92,10 @@ describe('overlayDispatch', () => {
             agentId: 'agent-1',
             dispatchId: 'dispatch-1',
             prompt: 'hello',
-            screenshotFileName: createOverlayScreenshotFilename('dispatch-1'),
+            screenshotFileNames: [firstFileName, secondFileName],
           },
         }),
-      ).toEqual([fileList[1]]);
+      ).toEqual([fileList[2], fileList[0]]);
     });
   });
 });

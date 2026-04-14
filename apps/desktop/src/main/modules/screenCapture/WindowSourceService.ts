@@ -1,5 +1,6 @@
 import type { ScreenCaptureWindowInfo } from '@lobechat/electron-client-ipc';
 import { app } from 'electron';
+import { openWindowsSync } from 'get-windows';
 import { Window } from 'node-screenshots';
 
 import { createLogger } from '@/utils/logger';
@@ -27,6 +28,14 @@ interface DisplayBounds {
   y: number;
 }
 
+interface PreparedWindow {
+  appName: string;
+  bounds: DisplayBounds;
+  title: string;
+  windowId: number;
+  z: number;
+}
+
 function intersects(a: DisplayBounds, b: DisplayBounds): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
@@ -36,11 +45,9 @@ export async function enumerateWindows(
 ): Promise<ScreenCaptureWindowInfo[]> {
   const selfName = app.getName();
 
-  // get-windows for whitelist filtering
   let visiblePids: Set<number> | undefined;
   try {
-    const { openWindows } = await import('get-windows');
-    const visible = await openWindows({
+    const visible = openWindowsSync({
       accessibilityPermission: false,
       screenRecordingPermission: false,
     });
@@ -49,49 +56,50 @@ export async function enumerateWindows(
     logger.warn('get-windows unavailable, skipping whitelist filter:', error);
   }
 
-  const visibleWindows = Window.all()
-    .filter((win) => {
+  const preparedWindows = Window.all()
+    .map((win): PreparedWindow | null => {
+      if (visiblePids && !visiblePids.has(win.pid())) return null;
+
       const appName = win.appName();
+      if (SYSTEM_APP_BLACKLIST.has(appName) || appName === selfName) return null;
+      if (win.isMinimized()) return null;
 
-      if (SYSTEM_APP_BLACKLIST.has(appName)) return false;
-      if (appName === selfName) return false;
-      if (win.isMinimized()) return false;
+      const width = win.width();
+      const height = win.height();
+      if (width < MIN_WIDTH || height < MIN_HEIGHT) return null;
 
-      const physWidth = win.width();
-      const physHeight = win.height();
-      if (physWidth < MIN_WIDTH || physHeight < MIN_HEIGHT) return false;
+      const bounds = {
+        height,
+        width,
+        x: win.x(),
+        y: win.y(),
+      };
+      if (!intersects(bounds, displayBounds)) return null;
 
-      const bounds = { height: physHeight, width: physWidth, x: win.x(), y: win.y() };
-      if (!intersects(bounds, displayBounds)) return false;
-
-      if (visiblePids && !visiblePids.has(win.pid())) return false;
-
-      return true;
+      return {
+        appName,
+        bounds,
+        title: win.title(),
+        windowId: win.id(),
+        z: win.z(),
+      };
     })
-    .sort((left, right) => right.z() - left.z());
+    .filter((win): win is PreparedWindow => win !== null)
+    .sort((left, right) => right.z - left.z);
 
-  const results = visibleWindows.map((win, index) => {
-    const bounds = {
-      height: win.height(),
-      width: win.width(),
-      x: win.x(),
-      y: win.y(),
-    };
-
-    return {
-      appName: win.appName(),
-      bounds,
-      order: index,
-      overlayBounds: {
-        height: bounds.height,
-        width: bounds.width,
-        x: bounds.x - displayBounds.x,
-        y: bounds.y - displayBounds.y,
-      },
-      title: win.title(),
-      windowId: win.id(),
-    };
-  });
+  const results = preparedWindows.map((win, index) => ({
+    appName: win.appName,
+    bounds: win.bounds,
+    order: index,
+    overlayBounds: {
+      height: win.bounds.height,
+      width: win.bounds.width,
+      x: win.bounds.x - displayBounds.x,
+      y: win.bounds.y - displayBounds.y,
+    },
+    title: win.title,
+    windowId: win.windowId,
+  }));
 
   logger.info(`Enumerated ${results.length} windows for display`);
   return results;

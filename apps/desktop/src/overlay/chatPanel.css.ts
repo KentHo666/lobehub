@@ -165,6 +165,114 @@ export const iconBtn = style({
   },
 });
 
+export const multiSelectionSummary = style({
+  borderBottom: `1px solid ${v(vars.colorBorderSecondary)}`,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  padding: '10px 12px',
+});
+
+export const multiSelectionHeader = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 2,
+  minWidth: 0,
+});
+
+export const multiSelectionTitle = style({
+  color: v(vars.colorText),
+  fontSize: 13,
+  fontWeight: 600,
+});
+
+export const multiSelectionMeta = style({
+  color: v(vars.colorTextQuaternary),
+  fontFamily: font.mono,
+  fontSize: 11,
+  letterSpacing: '0.01em',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+export const multiSelectionRail = style({
+  display: 'flex',
+  gap: 8,
+  overflowX: 'auto',
+  paddingBottom: 2,
+  scrollbarWidth: 'none',
+});
+
+export const multiSelectionItem = style({
+  background: v(vars.colorFillQuaternary),
+  border: `1px solid ${v(vars.colorBorderSecondary)}`,
+  borderRadius: 10,
+  display: 'flex',
+  flex: '0 0 104px',
+  flexDirection: 'column',
+  gap: 6,
+  minWidth: 0,
+  padding: 6,
+});
+
+export const multiSelectionItemActive = style({
+  background: v(vars.colorFillTertiary),
+  borderColor: `color-mix(in srgb, ${v(vars.colorText)} 12%, ${v(vars.colorBorderSecondary)} 88%)`,
+});
+
+export const multiSelectionThumbFrame = style({
+  position: 'relative',
+});
+
+export const multiSelectionThumb = style({
+  background: v(vars.colorFillTertiary),
+  backgroundPosition: 'center',
+  backgroundSize: 'cover',
+  border: `1px solid ${v(vars.colorBorderSecondary)}`,
+  borderRadius: 8,
+  height: 58,
+  overflow: 'hidden',
+  width: '100%',
+});
+
+export const multiSelectionRemoveBtn = style({
+  alignItems: 'center',
+  background: `color-mix(in srgb, ${v(vars.colorBgElevated)} 82%, transparent)`,
+  border: `1px solid ${v(vars.colorBorderSecondary)}`,
+  borderRadius: 999,
+  color: v(vars.colorTextSecondary),
+  cursor: 'pointer',
+  display: 'inline-flex',
+  height: 22,
+  justifyContent: 'center',
+  padding: 0,
+  position: 'absolute',
+  right: 6,
+  top: 6,
+  transition: `background 120ms ease, color 120ms ease, transform 120ms ease`,
+  width: 22,
+  selectors: {
+    '&:hover': {
+      background: v(vars.colorBgElevated),
+      color: v(vars.colorText),
+    },
+    '&:active': {
+      transform: 'scale(0.94)',
+    },
+  },
+});
+
+export const multiSelectionItemLabel = style({
+  color: v(vars.colorText),
+  fontSize: 11,
+  fontWeight: 600,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
 export const inputRow = style({
   display: 'flex',
   padding: '10px 12px 4px',
@@ -321,32 +429,33 @@ export const shortcutKbd = style({
 
 export const sendBtn = style({
   alignItems: 'center',
-  background: v(vars.colorPrimary),
-  border: `1px solid ${v(vars.colorPrimary)}`,
-  borderRadius: 8,
-  color: v(vars.colorTextLightSolid),
+  background: v(vars.colorBgElevated),
+  border: `1px solid ${v(vars.colorBgElevated)}`,
+  borderRadius: radius.button,
   cursor: 'pointer',
+  color: v(vars.colorText),
   display: 'inline-flex',
   flexShrink: 0,
   height: 32,
   justifyContent: 'center',
-  transition: `background 120ms ease, border-color 120ms ease, color 120ms ease, transform 140ms ${motion.spring}`,
+  padding: 0,
+  transition: `background-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), border-color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), color 0.2s cubic-bezier(0.645, 0.045, 0.355, 1), transform 140ms ${motion.spring}`,
   width: 32,
   selectors: {
     '&:hover:not(:disabled)': {
-      background: v(vars.colorPrimaryHover),
-      borderColor: v(vars.colorPrimaryHover),
+      background: `color-mix(in srgb, ${v(vars.colorBgElevated)} 88%, ${v(vars.colorText)} 12%)`,
+      borderColor: `color-mix(in srgb, ${v(vars.colorBgElevated)} 88%, ${v(vars.colorText)} 12%)`,
     },
     '&:active:not(:disabled)': {
-      background: v(vars.colorPrimaryActive),
-      borderColor: v(vars.colorPrimaryActive),
+      background: `color-mix(in srgb, ${v(vars.colorBgElevated)} 92%, #000 8%)`,
+      borderColor: `color-mix(in srgb, ${v(vars.colorBgElevated)} 92%, #000 8%)`,
       transform: 'scale(0.94)',
     },
     '&:disabled': {
       background: 'transparent',
-      borderColor: v(vars.colorBorderSecondary),
+      borderColor: v(vars.colorBgElevated),
       color: v(vars.colorTextQuaternary),
-      cursor: 'not-allowed',
+      cursor: 'default',
     },
   },
 });
@@ -387,6 +496,10 @@ export const panelHidden = style({
   opacity: 0,
   pointerEvents: 'none',
   visibility: 'hidden',
+});
+
+globalStyle(`.${multiSelectionRail}::-webkit-scrollbar`, {
+  display: 'none',
 });
 
 globalStyle(`.${textarea}::selection`, {

@@ -14,7 +14,7 @@ import { builtinAgentSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 import { useFileStore } from '@/store/file';
 
-import { createOverlayScreenshotFilename } from './overlayDispatch';
+import { createOverlayDispatchScreenshotFilename } from './overlayDispatch';
 import { getOverlayDispatchStoreState } from './overlayDispatchStore';
 
 const dataUrlToFile = async ({
@@ -45,20 +45,32 @@ const OverlayMessageDispatcher = memo(() => {
       if (!agentId) return;
 
       const dispatchId = nanoid();
-      const screenshotFileName = createOverlayScreenshotFilename(dispatchId);
+      const screenshotFileNames = payload.captures.map((_, index) =>
+        createOverlayDispatchScreenshotFilename(dispatchId, index),
+      );
 
       try {
-        const file = await dataUrlToFile({ dataUrl: payload.dataUrl, filename: screenshotFileName });
-        await useFileStore.getState().uploadChatFiles([file]);
+        const files = await Promise.all(
+          payload.captures.map((capture, index) =>
+            dataUrlToFile({
+              dataUrl: capture.dataUrl,
+              filename: screenshotFileNames[index]!,
+            }),
+          ),
+        );
+
+        if (files.length > 0) {
+          await useFileStore.getState().uploadChatFiles(files);
+        }
       } catch (error) {
-        console.warn('[OverlayMessageDispatcher] upload screenshot failed:', error);
+        console.warn('[OverlayMessageDispatcher] upload screenshot(s) failed:', error);
       }
 
       getOverlayDispatchStoreState().setPendingDispatch({
         agentId,
         dispatchId,
         prompt: payload.prompt,
-        screenshotFileName,
+        screenshotFileNames,
       });
 
       const { activeAgentId, activeTopicId, switchTopic } = useChatStore.getState();

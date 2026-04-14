@@ -4,8 +4,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ChatPanel, { type ChatPanelSelection, type ChatPanelSubmitPayload } from './ChatPanel';
 import { OVERLAY_COPY, OVERLAY_LAYOUT } from './constants';
-import { resolveCommittedSelectionRect, shouldHideChatPanel } from './overlaySelectionState';
 import * as styles from './overlay.css.ts';
+import { resolveCommittedSelectionRect, shouldHideChatPanel } from './overlaySelectionState';
 import { useDragSelection } from './useDragSelection';
 import { getTopmostWindowAtPoint, useWindowHighlight } from './useWindowHighlight';
 import WindowTag from './WindowTag';
@@ -13,13 +13,19 @@ import WindowTag from './WindowTag';
 const clipLabel = (text: string, max = OVERLAY_LAYOUT.labelClipLength): string =>
   text.length > max ? `${text.slice(0, max)}…` : text;
 
+const createSelectionId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 const ScreenCaptureOverlay = memo(() => {
   const [isPanelHidden, setIsPanelHidden] = useState(false);
   const [pendingSelectionRect, setPendingSelectionRect] = useState<
     ChatPanelSelection['rect'] | null
   >(null);
+  const [placementResetKey, setPlacementResetKey] = useState(0);
   const [session, setSession] = useState<ScreenCaptureSession | null>(null);
-  const [selection, setSelection] = useState<ChatPanelSelection | null>(null);
+  const [selections, setSelections] = useState<ChatPanelSelection[]>([]);
   const capturingRef = useRef(false);
   const pendingWindowRef = useRef<ScreenCaptureSession['windows'][number] | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -40,6 +46,11 @@ const ScreenCaptureOverlay = memo(() => {
   }, []);
 
   const windows = useMemo(() => session?.windows ?? [], [session?.windows]);
+  const activeSelection = useMemo(
+    () => (selections.length > 0 ? selections.at(-1)! : null),
+    [selections],
+  );
+  const hasSelections = selections.length > 0;
   const { hoveredWindow, handleMouseMove: hitTest } = useWindowHighlight(windows);
   const {
     dragRect,
@@ -67,25 +78,40 @@ const ScreenCaptureOverlay = memo(() => {
     window.electronAPI?.invoke?.('screenCapture.close');
   }, [traceOverlayEvent]);
 
-  const clearSelection = useCallback(() => {
-    traceOverlayEvent('selection.clear', {
-      pendingSelectionRect,
-      selectionRect: selection?.rect ?? null,
-    });
-    setIsPanelHidden(false);
-    setPendingSelectionRect(null);
-    setSelection(null);
-    reset();
-  }, [pendingSelectionRect, reset, selection?.rect, traceOverlayEvent]);
+  const removeSelection = useCallback(
+    (selectionId: string) => {
+      const nextSelections = selections.filter((item) => item.id !== selectionId);
+      if (nextSelections.length === selections.length) return;
+
+      traceOverlayEvent(nextSelections.length === 0 ? 'selection.clear' : 'selection.remove', {
+        pendingSelectionRect,
+        remainingSelectionCount: nextSelections.length,
+        removedSelectionId: selectionId,
+        selectionRect: activeSelection?.rect ?? null,
+      });
+
+      setSelections(nextSelections);
+      setPendingSelectionRect(null);
+      setIsPanelHidden(false);
+
+      if (nextSelections.length === 0) {
+        setPlacementResetKey((key) => key + 1);
+        reset();
+      }
+    },
+    [activeSelection?.rect, pendingSelectionRect, reset, selections, traceOverlayEvent],
+  );
 
   const handleSubmit = useCallback((payload: ChatPanelSubmitPayload) => {
     window.electronAPI?.invoke?.('screenCapture.submit', {
       agentId: payload.agentId,
-      dataUrl: payload.selection.dataUrl,
+      captures: payload.selections.map((selection) => ({
+        dataUrl: selection.dataUrl,
+        rect: selection.rect,
+      })),
       modelId: payload.modelId,
       prompt: payload.prompt,
       provider: payload.provider,
-      rect: payload.selection.rect,
     });
   }, []);
 
@@ -119,16 +145,20 @@ const ScreenCaptureOverlay = memo(() => {
         });
         if (result?.success && result.dataUrl) {
           setPendingSelectionRect(null);
-          setSelection({
-            dataUrl: result.dataUrl,
-            label: clipLabel(`${win.appName} — ${win.title}`),
-            rect: result.rect ?? {
-              height: win.overlayBounds.height,
-              width: win.overlayBounds.width,
-              x: win.overlayBounds.x,
-              y: win.overlayBounds.y,
+          setSelections((current) => [
+            ...current,
+            {
+              dataUrl: result.dataUrl,
+              id: createSelectionId(),
+              label: clipLabel(`${win.appName} — ${win.title}`),
+              rect: result.rect ?? {
+                height: win.overlayBounds.height,
+                width: win.overlayBounds.width,
+                x: win.overlayBounds.x,
+                y: win.overlayBounds.y,
+              },
             },
-          });
+          ]);
         } else {
           setPendingSelectionRect(null);
         }
@@ -159,11 +189,15 @@ const ScreenCaptureOverlay = memo(() => {
         });
         if (result?.success && result.dataUrl) {
           setPendingSelectionRect(null);
-          setSelection({
-            dataUrl: result.dataUrl,
-            label: OVERLAY_COPY.customRegionLabel,
-            rect: overlayLocalRect,
-          });
+          setSelections((current) => [
+            ...current,
+            {
+              dataUrl: result.dataUrl,
+              id: createSelectionId(),
+              label: OVERLAY_COPY.customRegionLabel,
+              rect: overlayLocalRect,
+            },
+          ]);
         } else {
           setPendingSelectionRect(null);
         }
@@ -189,18 +223,18 @@ const ScreenCaptureOverlay = memo(() => {
       setIsPanelHidden(true);
       setPendingSelectionRect(null);
 
-      const hitWindow = selection
+      const hitWindow = hasSelections
         ? getTopmostWindowAtPoint(windows, e.clientX, e.clientY)
         : hoveredWindow;
 
       traceOverlayEvent('pointer.down', {
-        hadSelection: !!selection,
+        hadSelection: hasSelections,
         hitWindowId: hitWindow?.windowId ?? null,
         point: { x: e.clientX, y: e.clientY },
+        selectionCount: selections.length,
       });
 
-      if (selection) {
-        setSelection(null);
+      if (hasSelections) {
         reset();
         hitTest(e.clientX, e.clientY);
       }
@@ -214,7 +248,16 @@ const ScreenCaptureOverlay = memo(() => {
         onMouseDown(e.clientX, e.clientY);
       }
     },
-    [selection, hoveredWindow, windows, onMouseDown, handleClose, reset, hitTest],
+    [
+      hasSelections,
+      hoveredWindow,
+      windows,
+      selections.length,
+      onMouseDown,
+      handleClose,
+      reset,
+      hitTest,
+    ],
   );
 
   const handleMouseMoveEvent = useCallback(
@@ -244,13 +287,13 @@ const ScreenCaptureOverlay = memo(() => {
 
       if (dragging) {
         onMouseMove(e.clientX, e.clientY);
-      } else if (!selection) {
+      } else if (!hasSelections) {
         // Only do hit-testing while there is no committed selection; once selected,
         // highlighting a window under the overlay is noisy.
         hitTest(e.clientX, e.clientY);
       }
     },
-    [selection, isDraggingRef, onMouseDown, onMouseMove, hitTest],
+    [hasSelections, isDraggingRef, onMouseDown, onMouseMove, hitTest],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -304,14 +347,14 @@ const ScreenCaptureOverlay = memo(() => {
 
   const committedSelectionRect = resolveCommittedSelectionRect({
     pendingSelectionRect,
-    selection,
+    selection: isPanelHidden ? null : activeSelection,
   });
   const panelHidden = shouldHideChatPanel({
     isPreviewingSelection: !!pendingSelectionRect,
     isSelecting: isPanelHidden,
   });
-  const showHover = hoveredWindow && !isDragging && !committedSelectionRect;
-  const showDrag = isDragging && dragRect && !selection;
+  const showHover = hoveredWindow && !hasSelections && !isDragging && !committedSelectionRect;
+  const showDrag = isDragging && dragRect;
 
   return (
     <div
@@ -375,11 +418,12 @@ const ScreenCaptureOverlay = memo(() => {
         hidden={panelHidden}
         modelId={session?.defaultModelId}
         models={session?.models}
-        selection={selection}
+        placementResetKey={placementResetKey}
+        selections={selections}
         theme={session?.theme}
         viewportHeight={viewportHeight}
         viewportWidth={viewportWidth}
-        onClearSelection={clearSelection}
+        onRemoveSelection={removeSelection}
         onSubmit={handleSubmit}
       />
     </div>

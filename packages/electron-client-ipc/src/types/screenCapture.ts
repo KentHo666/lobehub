@@ -81,12 +81,16 @@ export interface CapturePreviewResult {
   success: boolean;
 }
 
+export interface ScreenCaptureSubmitCapture {
+  dataUrl: string;
+  /** Overlay-local DIP rect bound to the preview dataUrl. */
+  rect: CaptureRectParams;
+}
+
 export interface ScreenCaptureSubmitParams {
   agentId?: string;
-  dataUrl: string;
+  captures: ScreenCaptureSubmitCapture[];
   modelId?: string;
   prompt: string;
   provider?: string;
-  /** Overlay-local DIP rect bound to the preview dataUrl. */
-  rect: CaptureRectParams;
 }
