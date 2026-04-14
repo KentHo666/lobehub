@@ -59,6 +59,7 @@ interface ProviderIniOptions extends Record<string, any> {
  */
 interface RouterOptionItem extends ProviderIniOptions {
   apiType?: ApiType;
+  apiVersionMapping?: Record<string, string>;
   id?: string;
   remark?: string;
 }
@@ -246,15 +247,29 @@ export const createRouterRuntime = ({
     private async createRuntimeFromOption(
       router: RouterInstance,
       optionItem: RouterOptionItem,
+      model: string,
     ): Promise<{
       channelId?: string;
       id: ApiType;
       remark?: string;
       runtime: LobeRuntimeAI;
     }> {
-      const { apiType: optionApiType, id: channelId, remark, ...optionOverrides } = optionItem;
+      const {
+        apiType: optionApiType,
+        apiVersion: optionApiVersion,
+        apiVersionMapping,
+        id: channelId,
+        remark,
+        ...optionOverrides
+      } = optionItem;
       const resolvedApiType = optionApiType ?? router.apiType;
-      const finalOptions = { ...this._params, ...this._options, ...optionOverrides };
+      const resolvedApiVersion = apiVersionMapping?.[model] ?? optionApiVersion;
+      const finalOptions = {
+        ...this._params,
+        ...this._options,
+        ...optionOverrides,
+        ...(resolvedApiVersion ? { apiVersion: resolvedApiVersion } : {}),
+      };
 
       /**
        * Vertex AI uses GoogleGenAI credentials flow rather than API keys.
@@ -326,7 +341,7 @@ export const createRouterRuntime = ({
           id: resolvedApiType,
           remark,
           runtime,
-        } = await this.createRuntimeFromOption(matchedRouter, optionItem);
+        } = await this.createRuntimeFromOption(matchedRouter, optionItem, model);
 
         try {
           const result = await requestHandler(runtime);
@@ -433,9 +448,11 @@ export const createRouterRuntime = ({
       const runtimes = await Promise.all(
         resolvedRouters.map(async (router) => {
           const routerOptions = this.normalizeRouterOptions(router);
+          const runtimeModel = router.models?.[0] ?? '';
           const { id: resolvedApiType, runtime } = await this.createRuntimeFromOption(
             router,
             routerOptions[0],
+            runtimeModel,
           );
 
           return {
@@ -494,7 +511,11 @@ export const createRouterRuntime = ({
       const model = (payload.body as any)?.model;
       const resolvedRouters = await this.resolveRouters(model);
       const routerOptions = this.normalizeRouterOptions(resolvedRouters[0]);
-      const { runtime } = await this.createRuntimeFromOption(resolvedRouters[0], routerOptions[0]);
+      const { runtime } = await this.createRuntimeFromOption(
+        resolvedRouters[0],
+        routerOptions[0],
+        model,
+      );
       return runtime.handleCreateVideoWebhook!(payload);
     }
 
