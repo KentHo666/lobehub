@@ -107,8 +107,10 @@ vi.mock('../Header', () => ({
   default: () => <div>chat-header</div>,
 }));
 
-vi.mock('../ViewerPanel', () => ({
-  default: () => null,
+vi.mock('./AgentDocumentEditorPanel', () => ({
+  default: ({ selectedDocumentId }: { selectedDocumentId: string | null }) => (
+    <div data-testid="workspace-document-panel">{selectedDocumentId}</div>
+  ),
 }));
 
 beforeEach(() => {
@@ -150,5 +152,13 @@ describe('Conversation right panel mount', () => {
 
     expect(resources).toHaveTextContent('Resources');
     expect(resources).toHaveTextContent('No agent documents yet');
+  });
+
+  it('switches to document editor inside the right panel when a document is selected', () => {
+    render(<AgentWorkspaceRightPanel selectedDocumentId={'doc-1'} onSelectDocument={vi.fn()} />);
+
+    expect(screen.getByTestId('right-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('workspace-document-panel')).toHaveTextContent('doc-1');
+    expect(screen.queryByTestId('workspace-resources')).not.toBeInTheDocument();
   });
 });
