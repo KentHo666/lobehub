@@ -8,7 +8,6 @@ import RightPanel from '@/features/RightPanel';
 import { useGlobalStore } from '@/store/global';
 
 import AgentDocumentEditorPanel from './AgentDocumentEditorPanel';
-import AgentSummary from './AgentSummary';
 import ProgressSection from './ProgressSection';
 import ResourcesSection from './ResourcesSection';
 
@@ -47,7 +46,7 @@ const AgentWorkingSidebar = memo<AgentWorkingSidebarProps>(
               }}
             />
             <Flexbox gap={8} height={'100%'} style={{ overflowY: 'auto' }} width={'100%'}>
-              <AgentSummary />
+              {/* <AgentSummary /> */}
               <ProgressSection />
               <ResourcesSection
                 selectedDocumentId={selectedDocumentId}

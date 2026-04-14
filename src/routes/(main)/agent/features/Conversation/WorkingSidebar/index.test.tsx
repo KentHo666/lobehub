@@ -64,8 +64,8 @@ vi.mock('react-i18next', () => ({
     t: (key: string) =>
       (
         ({
-          'agentWorkingSidebar.resources': 'Resources',
-          'agentWorkingSidebar.resources.empty': 'No agent documents yet',
+          'workingPanel.resources': 'Resources',
+          'workingPanel.resources.empty': 'No agent documents yet',
         }) as Record<string, string>
       )[key] || key,
   }),

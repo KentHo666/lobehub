@@ -148,9 +148,7 @@ const AgentDocumentEditorPanel = memo<AgentDocumentEditorPanelProps>(
           justify={'space-between'}
           padding={12}
         >
-          <Text strong>
-            {data?.filename || data?.title || t('agentWorkingSidebar.documents.title')}
-          </Text>
+          <Text strong>{data?.filename || data?.title || t('workingPanel.documents.title')}</Text>
           <Flexbox horizontal align={'center'} gap={8}>
             {isMarkdownDocument && (
               <Segmented<DocumentViewMode>
@@ -160,9 +158,7 @@ const AgentDocumentEditorPanel = memo<AgentDocumentEditorPanelProps>(
                     label: (
                       <Flexbox horizontal align={'center'} gap={4}>
                         <Icon icon={Eye} size={14} />
-                        <span style={{ fontSize: 12 }}>
-                          {t('agentWorkingSidebar.documents.preview')}
-                        </span>
+                        <span style={{ fontSize: 12 }}>{t('workingPanel.documents.preview')}</span>
                       </Flexbox>
                     ),
                     value: 'preview',
@@ -171,9 +167,7 @@ const AgentDocumentEditorPanel = memo<AgentDocumentEditorPanelProps>(
                     label: (
                       <Flexbox horizontal align={'center'} gap={4}>
                         <Icon icon={SquarePen} size={14} />
-                        <span style={{ fontSize: 12 }}>
-                          {t('agentWorkingSidebar.documents.edit')}
-                        </span>
+                        <span style={{ fontSize: 12 }}>{t('workingPanel.documents.edit')}</span>
                       </Flexbox>
                     ),
                     value: 'edit',
@@ -197,7 +191,7 @@ const AgentDocumentEditorPanel = memo<AgentDocumentEditorPanelProps>(
         )}
         {error && (
           <Text style={{ padding: 12 }} type={'danger'}>
-            {t('agentWorkingSidebar.documents.error')}
+            {t('workingPanel.documents.error')}
           </Text>
         )}
 
@@ -225,14 +219,14 @@ const AgentDocumentEditorPanel = memo<AgentDocumentEditorPanelProps>(
                 className={styles.footerInner}
                 justify={'space-between'}
               >
-                <Text type={'secondary'}>{t('agentWorkingSidebar.documents.unsaved')}</Text>
+                <Text type={'secondary'}>{t('workingPanel.documents.unsaved')}</Text>
                 <Flexbox horizontal gap={8}>
                   <Button
                     disabled={isSaving || shouldShowLoading}
                     size={'small'}
                     onClick={() => setDraft(savedContent)}
                   >
-                    {t('agentWorkingSidebar.documents.discard')}
+                    {t('workingPanel.documents.discard')}
                   </Button>
                   <Button
                     disabled={shouldShowLoading || Boolean(error)}
@@ -241,7 +235,7 @@ const AgentDocumentEditorPanel = memo<AgentDocumentEditorPanelProps>(
                     type={'primary'}
                     onClick={saveDocument}
                   >
-                    {t('agentWorkingSidebar.documents.save')}
+                    {t('workingPanel.documents.save')}
                   </Button>
                 </Flexbox>
               </Flexbox>
