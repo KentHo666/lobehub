@@ -51,7 +51,7 @@ import { resolveModelExtendParams } from './mecha/modelParamsResolver';
 import { type FetchOptions } from './types';
 
 const defaultProvider = ModelProvider.OpenAI;
-const providersWithDeploymentName = new Set([
+const providersWithDeploymentName = new Set<string>([
   ModelProvider.Azure,
   ModelProvider.AzureAI,
   ModelProvider.KimiCodingPlan,

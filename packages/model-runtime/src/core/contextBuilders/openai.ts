@@ -2,7 +2,6 @@ import { imageUrlToBase64, videoUrlToBase64 } from '@lobechat/utils';
 import { Buffer } from 'buffer/';
 import type OpenAI from 'openai';
 import { toFile } from 'openai';
-import type { options } from 'pdfkit';
 
 import { disableStreamModels, systemToUserModels } from '../../const/models';
 import type { ChatStreamPayload, OpenAIChatMessage, UserMessageContentPart } from '../../types';
@@ -116,7 +115,7 @@ export const convertOpenAIMessages = async (
 
 export const convertOpenAIResponseInputs = async (
   messages: OpenAIChatMessage[],
-  _options?: ConvertMessageContentOptions,
+  options?: ConvertMessageContentOptions,
 ) => {
   const strictToolPairing = options?.strictToolPairing === true;
   // OpenAI Responses API rejects inputs that keep a function_call without its matching
