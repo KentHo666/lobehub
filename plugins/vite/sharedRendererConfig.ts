@@ -1,3 +1,4 @@
+import react from '@vitejs/plugin-react';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
 
 import { viteEmotionSpeedy } from './emotionSpeedy';
@@ -107,6 +108,7 @@ const sharedChunkFileNames = (chunkInfo: { name: string }) => {
 
 export const sharedRolldownOutput = {
   chunkFileNames: sharedChunkFileNames,
+  strictExecutionOrder: true,
   codeSplitting: {
     groups: [
       {
@@ -138,7 +140,7 @@ export function sharedRendererPlugins(options: SharedRendererOptions) {
         exclude: [/\.(css|json)$/],
         hotKeys: ['altKey', 'ctrlKey'],
       }),
-    // react(), // Vite 8 uses Oxc-based React Refresh via Rolldown, so @vitejs/plugin-react is no longer needed
+    react(),
   ];
 }
 
