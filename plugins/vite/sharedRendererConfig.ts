@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
-import { codeInspectorPlugin } from 'code-inspector-plugin';
 
+// import { codeInspectorPlugin } from 'code-inspector-plugin';
 import { viteEmotionSpeedy } from './emotionSpeedy';
 import { viteMarkdownImport } from './markdownImport';
 import { viteNodeModuleStub } from './nodeModuleStub';
@@ -133,13 +133,13 @@ export function sharedRendererPlugins(options: SharedRendererOptions) {
     viteNodeModuleStub(),
     vitePlatformResolve(options.platform),
 
-    isDev &&
-      codeInspectorPlugin({
-        bundler: 'vite',
-        exclude: [/\.(css|json)$/],
-        hotKeys: ['altKey', 'ctrlKey'],
-      }),
-    react(),
+    // isDev &&
+    //   codeInspectorPlugin({
+    //     bundler: 'vite',
+    //     exclude: [/\.(css|json)$/],
+    //     hotKeys: ['altKey', 'ctrlKey'],
+    //   }),
+    react(), // Vite 8 uses Oxc-based React Refresh via Rolldown, so @vitejs/plugin-react is no longer needed
   ];
 }
 
