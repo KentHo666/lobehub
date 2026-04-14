@@ -15,7 +15,13 @@ export default class BrowserWindowsCtr extends ControllerModule {
   static override readonly groupName = 'windows';
 
   @shortcut('showApp')
-  async openMiniToolbar() {
+  toggleMainWindow() {
+    const mainWindow = this.app.browserManager.getMainWindow();
+    mainWindow.toggleVisible();
+  }
+
+  @shortcut('quickComposer')
+  async openQuickComposer() {
     await this.app.screenCaptureManager.startSession();
   }
 

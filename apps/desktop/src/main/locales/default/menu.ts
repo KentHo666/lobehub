@@ -70,7 +70,7 @@ const menu = {
   'macOS.preferences': 'Preferences...',
   'macOS.services': 'Services',
   'macOS.unhide': 'Show All',
-  'tray.openMiniToolbar': 'Open Mini Toolbar',
+  'tray.openMiniToolbar': 'Quick Composer',
   'tray.open': 'Open {{appName}}',
   'tray.quit': 'Quit',
   'tray.show': 'Show {{appName}}',

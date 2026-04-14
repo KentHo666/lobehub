@@ -81,9 +81,19 @@ describe('BrowserWindowsCtr', () => {
     browserWindowsCtr = new BrowserWindowsCtr(mockApp);
   });
 
-  describe('openMiniToolbar', () => {
-    it('should start the mini toolbar session', async () => {
-      await browserWindowsCtr.openMiniToolbar();
+  describe('toggleMainWindow', () => {
+    it('should toggle the main window visibility', () => {
+      browserWindowsCtr.toggleMainWindow();
+
+      expect(mockGetMainWindow).toHaveBeenCalled();
+      expect(mockToggleVisible).toHaveBeenCalled();
+      expect(mockStartSession).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('openQuickComposer', () => {
+    it('should start the quick composer session', async () => {
+      await browserWindowsCtr.openQuickComposer();
       expect(mockStartSession).toHaveBeenCalled();
       expect(mockGetMainWindow).not.toHaveBeenCalled();
       expect(mockToggleVisible).not.toHaveBeenCalled();

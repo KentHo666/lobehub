@@ -184,7 +184,7 @@ describe('MacOSMenu', () => {
       macOSMenu.buildAndSetAppMenu();
 
       const dockMenu = (app.dock.setMenu as any).mock.calls[0][0];
-      expect(dockMenu.template.some((item: any) => item.label === 'Open Mini Toolbar')).toBe(true);
+      expect(dockMenu.template.some((item: any) => item.label === 'Quick Composer')).toBe(true);
     });
   });
 

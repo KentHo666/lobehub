@@ -24,8 +24,8 @@ const isMacOSDesktopPlatform = () => {
   return typeof process !== 'undefined' && process.platform === 'darwin';
 };
 
-const resolveDesktopShowAppDefaultKeys = () =>
-  isMacOSDesktopPlatform() ? 'doubleOption' : combineKeys([KeyEnum.Ctrl, 'e']);
+const resolveDesktopQuickComposerDefaultKeys = () =>
+  isMacOSDesktopPlatform() ? 'doubleOption' : '';
 
 export type HotkeyRegistration = HotkeyItem[];
 
@@ -144,8 +144,12 @@ type DesktopHotkeyRegistration = DesktopHotkeyItem[];
 // Desktop hotkey configuration
 export const DESKTOP_HOTKEYS_REGISTRATION: DesktopHotkeyRegistration = [
   {
+    id: DesktopHotkeyEnum.QuickComposer,
+    keys: resolveDesktopQuickComposerDefaultKeys(),
+  },
+  {
     id: DesktopHotkeyEnum.ShowApp,
-    keys: resolveDesktopShowAppDefaultKeys(),
+    keys: combineKeys([KeyEnum.Ctrl, 'e']),
   },
   {
     id: DesktopHotkeyEnum.OpenSettings,

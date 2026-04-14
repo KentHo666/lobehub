@@ -111,6 +111,7 @@ export interface HotkeyItem {
 // ================== Desktop ================== //
 
 export const DesktopHotkeyEnum = {
+  QuickComposer: 'quickComposer',
   OpenSettings: 'openSettings',
   ShowApp: 'showApp',
 };

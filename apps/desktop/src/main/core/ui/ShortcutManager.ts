@@ -12,7 +12,7 @@ import {
 // Create logger
 const logger = createLogger('core:ShortcutManager');
 
-const SHOW_APP_SHORTCUT_ID = 'showApp';
+const QUICK_COMPOSER_SHORTCUT_ID = 'quickComposer';
 
 const normalizeShortcutToken = (accelerator: string) => accelerator.trim().toLowerCase();
 
@@ -87,7 +87,7 @@ export class ShortcutManager {
       logger.debug(`Updating shortcut ${id} to ${accelerator}`);
 
       // 1. Check if ID is valid
-      if (!DEFAULT_SHORTCUTS_CONFIG[id]) {
+      if (!(id in DEFAULT_SHORTCUTS_CONFIG)) {
         logger.error(`Invalid shortcut ID: ${id}`);
         return { errorType: 'INVALID_ID', success: false };
       }
@@ -134,7 +134,7 @@ export class ShortcutManager {
         normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
       ) {
         logger.error(
-          `Invalid accelerator format: ${trimmedAccelerator}. ${MACOS_DOUBLE_OPTION_SHORTCUT} is only available for ${SHOW_APP_SHORTCUT_ID} on macOS`,
+          `Invalid accelerator format: ${trimmedAccelerator}. ${MACOS_DOUBLE_OPTION_SHORTCUT} is only available for ${QUICK_COMPOSER_SHORTCUT_ID} on macOS`,
         );
         return { errorType: 'INVALID_FORMAT', success: false };
       }
@@ -281,7 +281,7 @@ export class ShortcutManager {
         let hasInvalidKeys = false;
 
         Object.entries(config).forEach(([id, accelerator]) => {
-          if (DEFAULT_SHORTCUTS_CONFIG[id]) {
+          if (id in DEFAULT_SHORTCUTS_CONFIG) {
             filteredConfig[id] = accelerator;
           } else {
             hasInvalidKeys = true;
@@ -296,6 +296,24 @@ export class ShortcutManager {
             logger.debug(`Adding missing default shortcut: ${id} = ${defaultAccelerator}`);
           }
         });
+
+        const hasLegacyQuickComposerBinding =
+          normalizeShortcutToken(filteredConfig.showApp || '') ===
+          normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT);
+
+        if (hasLegacyQuickComposerBinding) {
+          filteredConfig.showApp = DEFAULT_SHORTCUTS_CONFIG.showApp;
+
+          if (
+            normalizeShortcutToken(filteredConfig.quickComposer || '') !==
+            normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
+          ) {
+            filteredConfig.quickComposer = DEFAULT_SHORTCUTS_CONFIG.quickComposer;
+          }
+
+          hasInvalidKeys = true;
+          logger.debug('Migrated legacy double Option binding from showApp to quickComposer');
+        }
 
         this.shortcutsConfig = filteredConfig;
 
@@ -338,7 +356,7 @@ export class ShortcutManager {
       logger.debug(`Registering shortcut '${id}' with ${accelerator}`);
 
       // Only register shortcuts that exist in DEFAULT_SHORTCUTS_CONFIG
-      if (!DEFAULT_SHORTCUTS_CONFIG[id]) {
+      if (!(id in DEFAULT_SHORTCUTS_CONFIG)) {
         logger.debug(`Skipping shortcut '${id}' - not found in DEFAULT_SHORTCUTS_CONFIG`);
         return;
       }
@@ -356,7 +374,7 @@ export class ShortcutManager {
           normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
         ) {
           logger.warn(
-            `Skipping shortcut '${id}' - ${MACOS_DOUBLE_OPTION_SHORTCUT} is only supported for ${SHOW_APP_SHORTCUT_ID} on macOS`,
+            `Skipping shortcut '${id}' - ${MACOS_DOUBLE_OPTION_SHORTCUT} is only supported for ${QUICK_COMPOSER_SHORTCUT_ID} on macOS`,
           );
           return;
         }
@@ -369,7 +387,7 @@ export class ShortcutManager {
   private isMacOSDoubleOptionShortcut(id: string, accelerator: string) {
     return (
       process.platform === 'darwin' &&
-      id === SHOW_APP_SHORTCUT_ID &&
+      id === QUICK_COMPOSER_SHORTCUT_ID &&
       normalizeShortcutToken(accelerator) === normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
     );
   }
