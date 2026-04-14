@@ -1,6 +1,5 @@
-import { spawn } from 'node:child_process';
-
 import type { ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 import { createLogger } from '@/utils/logger';
 
@@ -108,7 +107,9 @@ export class MacOSDoubleOptionMonitor {
     });
 
     child.on('exit', (code, signal) => {
-      logger.info(`macOS double Option monitor exited: code=${code ?? 'null'} signal=${signal ?? 'null'}`);
+      logger.info(
+        `macOS double Option monitor exited: code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+      );
       this.process = null;
       this.stdoutBuffer = '';
     });

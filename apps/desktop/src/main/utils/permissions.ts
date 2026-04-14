@@ -7,8 +7,25 @@
  */
 import { shell } from 'electron';
 import { macOS } from 'electron-is';
+import type {
+  askForAccessibilityAccess,
+  askForCameraAccess,
+  askForFullDiskAccess,
+  askForMicrophoneAccess,
+  askForScreenCaptureAccess,
+  getAuthStatus,
+} from 'node-mac-permissions';
 
 import { createLogger } from './logger';
+
+interface NodeMacPermissionsModule {
+  askForAccessibilityAccess: typeof askForAccessibilityAccess;
+  askForCameraAccess: typeof askForCameraAccess;
+  askForFullDiskAccess: typeof askForFullDiskAccess;
+  askForMicrophoneAccess: typeof askForMicrophoneAccess;
+  askForScreenCaptureAccess: typeof askForScreenCaptureAccess;
+  getAuthStatus: typeof getAuthStatus;
+}
 
 // Type definitions - use module types when available, fallback to local definition
 // Note: We don't import the module statically, so we need local type definitions
@@ -29,18 +46,18 @@ type PermissionType = 'authorized' | 'denied' | 'not determined' | 'restricted';
 
 // Lazy-loaded module cache
 // @ts-ignore - node-mac-permissions is optional and only available on macOS
-let macPermissionsModule: typeof import('node-mac-permissions') | null = null;
+let macPermissionsModule: NodeMacPermissionsModule | null = null;
 
 // Test injection override (set via __setMacPermissionsModule for testing)
 // @ts-ignore - node-mac-permissions is optional and only available on macOS
-let testModuleOverride: typeof import('node-mac-permissions') | null = null;
+let testModuleOverride: NodeMacPermissionsModule | null = null;
 
 /**
  * Lazily load the node-mac-permissions module (macOS only)
  * Returns null on non-macOS platforms
  */
 // @ts-ignore - node-mac-permissions is optional and only available on macOS
-function getMacPermissionsModule(): typeof import('node-mac-permissions') | null {
+function getMacPermissionsModule(): NodeMacPermissionsModule | null {
   // Allow test injection to override the module
   if (testModuleOverride) {
     return testModuleOverride;
@@ -52,7 +69,7 @@ function getMacPermissionsModule(): typeof import('node-mac-permissions') | null
 
   if (!macPermissionsModule) {
     // Dynamic require to prevent module loading on non-macOS platforms
-     
+
     macPermissionsModule = require('node-mac-permissions');
   }
 
@@ -74,7 +91,7 @@ export function __resetMacPermissionsModuleCache(): void {
  */
 export function __setMacPermissionsModule(
   // @ts-ignore - node-mac-permissions is optional and only available on macOS
-  module: typeof import('node-mac-permissions') | null,
+  module: NodeMacPermissionsModule | null,
 ): void {
   testModuleOverride = module;
 }

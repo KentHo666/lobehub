@@ -1,4 +1,4 @@
-import * as path from 'node:path';
+import path from 'node:path';
 
 import type { MenuItemConstructorOptions } from 'electron';
 import { app, clipboard, Menu, shell } from 'electron';

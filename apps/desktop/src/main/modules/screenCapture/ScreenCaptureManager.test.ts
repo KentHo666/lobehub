@@ -86,6 +86,10 @@ vi.mock('./CaptureService', () => ({
 describe('ScreenCaptureManager', () => {
   const createApp = () =>
     ({
+      browserManager: {
+        broadcastToAllWindows: vi.fn(),
+        showMainWindow: vi.fn(),
+      },
       buildRendererUrl: vi.fn().mockResolvedValue('http://localhost:5173/overlay'),
     }) as any;
 
@@ -131,10 +135,12 @@ describe('ScreenCaptureManager', () => {
       expect(result.dataUrl).toBe(`data:image/png;base64,${pngBuffer.toString('base64')}`);
       expect(mockBrowserWindow.setOpacity).toHaveBeenCalledWith(0);
       expect(mockBrowserWindow.setOpacity).toHaveBeenLastCalledWith(1);
-      expect(mockCaptureRect).toHaveBeenCalledWith(
-        { height: 50, width: 100, x: 10, y: 20 },
-        2,
-      );
+      expect(mockCaptureRect).toHaveBeenCalledWith({ height: 50, width: 100, x: 10, y: 20 }, 2, {
+        height: 900,
+        width: 1440,
+        x: 0,
+        y: 0,
+      });
     });
 
     it('returns failure when previewRect has no session', async () => {
@@ -190,9 +196,13 @@ describe('ScreenCaptureManager', () => {
       await manager.startSession();
 
       await manager.handleSubmit({
-        dataUrl: 'data:image/png;base64,AAAA',
+        captures: [
+          {
+            dataUrl: 'data:image/png;base64,AAAA',
+            rect: { height: 10, width: 20, x: 0, y: 0 },
+          },
+        ],
         prompt: 'hello',
-        rect: { height: 10, width: 20, x: 0, y: 0 },
       });
 
       expect(mockBrowserWindow.destroy).toHaveBeenCalled();

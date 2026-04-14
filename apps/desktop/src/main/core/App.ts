@@ -1,5 +1,5 @@
 import os from 'node:os';
-import { join } from 'node:path';
+import path from 'node:path';
 
 import type { ElectronIPCEventHandler } from '@lobechat/electron-server-ipc';
 import { ElectronIPCServer } from '@lobechat/electron-server-ipc';
@@ -422,7 +422,7 @@ export class App {
     logger.debug('Setting up dev branding');
     app.setName('lobehub-desktop-dev');
     if (macOS()) {
-      app.dock!.setIcon(join(buildDir, 'icon-dev.png'));
+      app.dock!.setIcon(path.join(buildDir, 'icon-dev.png'));
     }
   };
 

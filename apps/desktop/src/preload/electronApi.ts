@@ -1,5 +1,5 @@
-import type { ScreenCaptureSession } from '@lobechat/electron-client-ipc';
 import { electronAPI } from '@electron-toolkit/preload';
+import type { ScreenCaptureSession } from '@lobechat/electron-client-ipc';
 import { contextBridge, ipcRenderer } from 'electron';
 
 import { invoke } from './invoke';
@@ -57,3 +57,5 @@ export const setupElectronApi = () => {
     platform: process.platform,
   });
 };
+
+export type SetupElectronApiFunction = typeof setupElectronApi;

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { SetupElectronApiFunction } from './electronApi';
+
 // Mock electron modules
 const mockElectronAPI = { someAPI: 'mock-electron-api' };
 const mockContextBridgeExposeInMainWorld = vi.fn();
@@ -32,7 +34,7 @@ vi.mock('./streamer', () => ({
 
 describe('setupElectronApi', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-  let setupElectronApi: typeof import('./electronApi').setupElectronApi;
+  let setupElectronApi: SetupElectronApiFunction;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -172,10 +174,7 @@ describe('setupElectronApi', () => {
   it('should subscribe to screenCaptureSession in preload and replay cached payloads', () => {
     setupElectronApi();
 
-    expect(mockIpcRendererOn).toHaveBeenCalledWith(
-      'screenCaptureSession',
-      expect.any(Function),
-    );
+    expect(mockIpcRendererOn).toHaveBeenCalledWith('screenCaptureSession', expect.any(Function));
 
     const preloadListener = mockIpcRendererOn.mock.calls.find(
       ([channel]) => channel === 'screenCaptureSession',

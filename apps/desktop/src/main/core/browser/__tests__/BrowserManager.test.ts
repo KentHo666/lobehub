@@ -144,7 +144,7 @@ describe('BrowserManager', () => {
 
     it('should restore a minimized main window before showing it', () => {
       const appBrowser = manager.getMainWindow();
-      appBrowser.browserWindow.isMinimized.mockReturnValue(true);
+      vi.mocked(appBrowser.browserWindow.isMinimized).mockReturnValue(true);
 
       manager.showMainWindow();
 

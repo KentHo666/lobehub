@@ -14,8 +14,8 @@ interface DragPoint {
 
 export interface DragSelectionTracker {
   readonly dragRect: DragRect | null;
-  readonly isDragging: boolean;
   finish: () => void;
+  readonly isDragging: boolean;
   move: (clientX: number, clientY: number) => DragRect | null;
   reset: () => void;
   start: (clientX: number, clientY: number) => void;
@@ -80,12 +80,15 @@ export function useDragSelection() {
     isDraggingRef.current = trackerRef.current?.isDragging ?? false;
   }, []);
 
-  const onMouseDown = useCallback((clientX: number, clientY: number) => {
-    trackerRef.current?.start(clientX, clientY);
-    syncRefs();
-    setIsDragging(true);
-    setDragRect(null);
-  }, [syncRefs]);
+  const onMouseDown = useCallback(
+    (clientX: number, clientY: number) => {
+      trackerRef.current?.start(clientX, clientY);
+      syncRefs();
+      setIsDragging(true);
+      setDragRect(null);
+    },
+    [syncRefs],
+  );
 
   const onMouseMove = useCallback(
     (clientX: number, clientY: number) => {

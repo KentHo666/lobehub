@@ -1,4 +1,4 @@
-import { extname, join } from 'node:path';
+import path from 'node:path';
 
 import { pathExistsSync } from 'fs-extra';
 
@@ -13,8 +13,8 @@ const logger = createLogger('core:RendererUrlManager');
 
 // Vite build with root=monorepo preserves input path structure,
 // so index.html ends up at apps/desktop/index.html in outDir.
-const SPA_ENTRY_HTML = join(rendererDir, 'apps', 'desktop', 'index.html');
-const OVERLAY_ENTRY_HTML = join(rendererDir, 'apps', 'desktop', 'overlay.html');
+const SPA_ENTRY_HTML = path.join(rendererDir, 'apps', 'desktop', 'index.html');
+const OVERLAY_ENTRY_HTML = path.join(rendererDir, 'apps', 'desktop', 'overlay.html');
 
 export class RendererUrlManager {
   private readonly rendererProtocolManager: RendererProtocolManager;
@@ -76,8 +76,8 @@ export class RendererUrlManager {
     const pathname = url.pathname;
 
     // Static assets: direct file mapping
-    if (pathname.startsWith('/assets/') || extname(pathname)) {
-      const filePath = join(rendererDir, pathname);
+    if (pathname.startsWith('/assets/') || path.extname(pathname)) {
+      const filePath = path.join(rendererDir, pathname);
       return pathExistsSync(filePath) ? filePath : null;
     }
 

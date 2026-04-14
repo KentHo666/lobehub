@@ -19,7 +19,7 @@ const mockGetShortcutsConfig = vi.fn().mockReturnValue({
   toggleMainWindow: 'CommandOrControl+Shift+L',
   openSettings: 'CommandOrControl+,',
 });
-const mockUpdateShortcutConfig = vi.fn().mockImplementation((id, accelerator) => {
+const mockUpdateShortcutConfig = vi.fn().mockImplementation((_id, _accelerator) => {
   // 简单模拟更新成功
   return true;
 });

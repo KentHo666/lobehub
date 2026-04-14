@@ -257,6 +257,7 @@ const ScreenCaptureOverlay = memo(() => {
       handleClose,
       reset,
       hitTest,
+      traceOverlayEvent,
     ],
   );
 
@@ -293,7 +294,7 @@ const ScreenCaptureOverlay = memo(() => {
         hitTest(e.clientX, e.clientY);
       }
     },
-    [hasSelections, isDraggingRef, onMouseDown, onMouseMove, hitTest],
+    [hasSelections, isDraggingRef, onMouseDown, onMouseMove, hitTest, traceOverlayEvent],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -343,7 +344,7 @@ const ScreenCaptureOverlay = memo(() => {
     }
 
     onMouseUp();
-  }, [dragRectRef, isDraggingRef, reset, onMouseUp, previewWindow, previewRect]);
+  }, [dragRectRef, isDraggingRef, reset, onMouseUp, previewWindow, previewRect, traceOverlayEvent]);
 
   const committedSelectionRect = resolveCommittedSelectionRect({
     pendingSelectionRect,

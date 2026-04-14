@@ -1,15 +1,8 @@
-import { join } from 'node:path';
+import path from 'node:path';
 
 import type { MainBroadcastEventKey, MainBroadcastParams } from '@lobechat/electron-client-ipc';
-import type {
-  DisplayBalloonOptions,
-  MenuItemConstructorOptions} from 'electron';
-import {
-  app,
-  Menu,
-  nativeImage,
-  Tray as ElectronTray,
-} from 'electron';
+import type { DisplayBalloonOptions, MenuItemConstructorOptions } from 'electron';
+import { app, Menu, nativeImage, Tray as ElectronTray } from 'electron';
 
 import { resourcesDir } from '@/const/dir';
 import { createLogger } from '@/utils/logger';
@@ -91,7 +84,7 @@ export class Tray {
 
     // Load tray icon
     logger.info(`Creating new tray instance: ${this.identifier}`);
-    const iconFile = join(resourcesDir, iconPath);
+    const iconFile = path.join(resourcesDir, iconPath);
     logger.debug(`[${this.identifier}] Loading icon: ${iconFile}`);
 
     try {
@@ -178,7 +171,7 @@ export class Tray {
   updateIcon(iconPath: string) {
     logger.debug(`[${this.identifier}] Updating icon: ${iconPath}`);
     try {
-      const iconFile = join(resourcesDir, iconPath);
+      const iconFile = path.join(resourcesDir, iconPath);
       const icon = nativeImage.createFromPath(iconFile);
       this._tray?.setImage(icon);
       this.options.iconPath = iconPath;

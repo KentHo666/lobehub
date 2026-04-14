@@ -4,10 +4,7 @@ import { DEFAULT_SHORTCUTS_CONFIG } from '@/shortcuts';
 import { createLogger } from '@/utils/logger';
 
 import type { App } from '../App';
-import {
-  MacOSDoubleOptionMonitor,
-  MACOS_DOUBLE_OPTION_SHORTCUT,
-} from './MacOSDoubleOptionMonitor';
+import { MACOS_DOUBLE_OPTION_SHORTCUT, MacOSDoubleOptionMonitor } from './MacOSDoubleOptionMonitor';
 
 // Create logger
 const logger = createLogger('core:ShortcutManager');
