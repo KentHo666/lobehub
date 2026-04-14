@@ -26,9 +26,12 @@ const leftOptionKeyCode = 58;
 const rightOptionKeyCode = 61;
 const doubleTapIntervalMs = 300;
 const pollIntervalSeconds = 0.02;
+const hidStateId = $.kCGEventSourceStateHIDSystemState;
+const combinedStateId = $.kCGEventSourceStateCombinedSessionState;
 
 const isKeyPressed = (keyCode) =>
-  Boolean($.CGEventSourceKeyState($.kCGEventSourceStateCombinedSessionState, keyCode));
+  Boolean($.CGEventSourceKeyState(hidStateId, keyCode)) ||
+  Boolean($.CGEventSourceKeyState(combinedStateId, keyCode));
 
 let lastOptionDown = false;
 let lastOptionDownAt = 0;
