@@ -106,6 +106,11 @@ const sharedChunkFileNames = (chunkInfo: { name: string }) => {
   return 'assets/[name]-[hash].js';
 };
 
+export const sharedRollupOutput = {
+  chunkFileNames: sharedChunkFileNames,
+  manualChunks: sharedManualChunks,
+};
+
 export const sharedRolldownOutput = {
   chunkFileNames: sharedChunkFileNames,
   strictExecutionOrder: true,
