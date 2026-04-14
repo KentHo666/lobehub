@@ -32,4 +32,5 @@ export type {
   AuthorizationProgress,
   MarketAuthorizationParams,
 } from './remoteServer';
+export type { OverlayDispatchMessagePayload } from './screenCapture';
 export type { OpenSettingsWindowOptions } from './windows';

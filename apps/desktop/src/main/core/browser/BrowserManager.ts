@@ -32,8 +32,15 @@ export class BrowserManager {
 
   showMainWindow() {
     logger.debug('Showing main window');
-    const window = this.getMainWindow();
-    window.show();
+    const browser = this.getMainWindow();
+    const window = browser.browserWindow;
+
+    if (window.isMinimized()) {
+      window.restore();
+    }
+
+    browser.show();
+    window.focus();
   }
 
   broadcastToAllWindows = <T extends MainBroadcastEventKey>(

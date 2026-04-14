@@ -7,9 +7,57 @@ export interface ScreenCaptureWindowInfo {
   windowId: number;
 }
 
+/**
+ * Lightweight agent descriptor for the overlay selector.
+ * Populated by the renderer data layer (TRPC), not the IPC service.
+ */
+export interface ScreenCaptureAgentOption {
+  avatar?: string | null;
+  backgroundColor?: string | null;
+  id: string;
+  title: string;
+}
+
+/**
+ * Lightweight model descriptor for the overlay selector.
+ * Populated by the renderer data layer (TRPC), not the IPC service.
+ */
+export interface ScreenCaptureModelOption {
+  displayName?: string | null;
+  id: string;
+  provider: string;
+}
+
+export interface ScreenCaptureOverlayTheme {
+  colorBgElevated: string;
+  colorBorderSecondary: string;
+  colorFill: string;
+  colorFillQuaternary: string;
+  colorFillSecondary: string;
+  colorFillTertiary: string;
+  colorPrimary: string;
+  colorPrimaryActive: string;
+  colorPrimaryHover: string;
+  colorText: string;
+  colorTextLightSolid: string;
+  colorTextQuaternary: string;
+  colorTextSecondary: string;
+  colorTextTertiary: string;
+  panelBorder: string;
+  panelShadow: string;
+}
+
 export interface ScreenCaptureSession {
+  /** Optional agent list; overlay may still render with empty list. */
+  agents?: ScreenCaptureAgentOption[];
+  defaultAgentId?: string;
+  defaultModelId?: string;
+  defaultProvider?: string;
   displayBounds: { height: number; width: number; x: number; y: number };
+  /** Optional model list. */
+  models?: ScreenCaptureModelOption[];
   scaleFactor: number;
+  theme?: ScreenCaptureOverlayTheme;
   windows: ScreenCaptureWindowInfo[];
 }
 
@@ -34,8 +82,11 @@ export interface CapturePreviewResult {
 }
 
 export interface ScreenCaptureSubmitParams {
+  agentId?: string;
   dataUrl: string;
+  modelId?: string;
   prompt: string;
+  provider?: string;
   /** Overlay-local DIP rect bound to the preview dataUrl. */
   rect: CaptureRectParams;
 }

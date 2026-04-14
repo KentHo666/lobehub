@@ -1,6 +1,9 @@
 import type {
   CapturePreviewResult,
   CaptureRectParams,
+  ScreenCaptureAgentOption,
+  ScreenCaptureModelOption,
+  ScreenCaptureOverlayTheme,
   ScreenCaptureSession,
   ScreenCaptureSubmitParams,
 } from '@lobechat/electron-client-ipc';
@@ -18,11 +21,39 @@ const logger = createLogger('screenCapture:ScreenCaptureManager');
 
 const HIDE_SETTLE_MS = 40;
 
+export interface OverlaySnapshotPayload {
+  agents?: ScreenCaptureAgentOption[];
+  defaultAgentId?: string;
+  defaultModelId?: string;
+  defaultProvider?: string;
+  models?: ScreenCaptureModelOption[];
+  theme?: ScreenCaptureOverlayTheme;
+}
+
 export class ScreenCaptureManager {
   private overlayWindow: BrowserWindow | null = null;
   private session: ScreenCaptureSession | null = null;
+  /**
+   * Most recent agent/model snapshot published by the main renderer via
+   * `screenCapture.publishOverlaySnapshot`. Populated asynchronously; the
+   * overlay still opens with an empty selector list if the renderer has not
+   * pushed yet.
+   */
+  private snapshot: OverlaySnapshotPayload = {};
 
   constructor(private readonly app: App) {}
+
+  publishOverlaySnapshot(payload: OverlaySnapshotPayload): void {
+    this.snapshot = payload;
+    // If a session is already on screen, push the updated lists so the user
+    // sees the current agents without reopening the overlay.
+    if (this.session) {
+      this.session = { ...this.session, ...this.snapshot };
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+        this.overlayWindow.webContents.send('screenCaptureSession', this.session);
+      }
+    }
+  }
 
   get isActive(): boolean {
     return this.overlayWindow !== null && !this.overlayWindow.isDestroyed();
@@ -48,6 +79,7 @@ export class ScreenCaptureManager {
       displayBounds: bounds,
       scaleFactor,
       windows,
+      ...this.snapshot,
     };
 
     await this.createOverlayWindow(bounds);
@@ -65,7 +97,9 @@ export class ScreenCaptureManager {
 
     logger.info(`Previewing window ${windowId} (${winInfo.appName})`);
     const pngBuffer = await this.withOverlayHidden(() => captureWindow(windowId));
-    if (!pngBuffer) return { error: 'capture failed', success: false };
+    if (!pngBuffer) {
+      return { error: 'capture failed', success: false };
+    }
 
     return {
       dataUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`,
@@ -97,11 +131,13 @@ export class ScreenCaptureManager {
       y: params.y + displayBounds.y,
     };
 
-    logger.info(
-      `Previewing rect (${params.x},${params.y} ${params.width}x${params.height})`,
+    logger.info(`Previewing rect (${params.x},${params.y} ${params.width}x${params.height})`);
+    const pngBuffer = await this.withOverlayHidden(() =>
+      captureRect(absolute, scaleFactor, displayBounds),
     );
-    const pngBuffer = await this.withOverlayHidden(() => captureRect(absolute, scaleFactor));
-    if (!pngBuffer) return { error: 'capture failed', success: false };
+    if (!pngBuffer) {
+      return { error: 'capture failed', success: false };
+    }
 
     return {
       dataUrl: `data:image/png;base64,${pngBuffer.toString('base64')}`,
@@ -112,10 +148,19 @@ export class ScreenCaptureManager {
 
   async handleSubmit(params: ScreenCaptureSubmitParams): Promise<void> {
     logger.info(
-      `Submit capture — promptLen=${params.prompt.length} size=${params.rect.width}x${params.rect.height}`,
+      `Submit capture — promptLen=${params.prompt.length} size=${params.rect.width}x${params.rect.height} agentId=${params.agentId ?? '-'} modelId=${params.modelId ?? '-'}`,
     );
-    // Phase 1: interaction validation only. Forwarding to chat store is TODO.
+
+    // Close the overlay first so focus transfers cleanly to the main window.
     this.close();
+
+    try {
+      this.app.browserManager.showMainWindow();
+    } catch (error) {
+      logger.error('Failed to show main window on submit:', error);
+    }
+
+    this.app.browserManager.broadcastToAllWindows('overlayDispatchMessage', params);
   }
 
   close(): void {

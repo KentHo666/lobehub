@@ -2,93 +2,135 @@ import { globalStyle, keyframes, style } from '@vanilla-extract/css';
 
 import { OVERLAY_LAYOUT } from './constants';
 
-const theme = {
-  color: {
-    divider: 'rgba(15, 23, 42, 0.08)',
-    footerBackground: 'rgba(248, 250, 252, 0.92)',
-    icon: '#5b6578',
-    iconHover: '#0f172a',
-    panelBackground: 'rgba(255, 255, 255, 0.96)',
-    panelButton: 'rgba(15, 23, 42, 0.04)',
-    panelButtonHover: 'rgba(15, 23, 42, 0.08)',
-    panelMuted: '#637087',
-    panelPrimary: '#2563eb',
-    panelPrimaryHover: '#1d4ed8',
-    panelPrimaryText: '#ffffff',
-    panelSubtle: '#8a95a7',
-    panelText: '#0f172a',
-    thumbBackground: 'linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%)',
-  },
-  font: {
-    mono: "'SF Mono', ui-monospace, Menlo, monospace",
-    system:
-      "'SF Pro Display', 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-  },
-  motion: {
-    enter: 'cubic-bezier(0.22, 1, 0.36, 1)',
-    spring: 'cubic-bezier(0.32, 0.72, 0, 1)',
-  },
-  radius: {
-    button: '10px',
-    kbd: '6px',
-    panel: '16px',
-    thumb: '10px',
-  },
-  shadow: {
-    connector: '0 0 0 4px rgba(37, 99, 235, 0.16), 0 0 18px rgba(37, 99, 235, 0.36)',
-    panel: '0 20px 44px rgba(2, 8, 23, 0.26), 0 2px 10px rgba(2, 8, 23, 0.08)',
-  },
+const vars = {
+  colorBgElevated: '--lobe-overlay-bg-elevated',
+  colorBorderSecondary: '--lobe-overlay-border-secondary',
+  colorFill: '--lobe-overlay-fill',
+  colorFillQuaternary: '--lobe-overlay-fill-quaternary',
+  colorFillSecondary: '--lobe-overlay-fill-secondary',
+  colorFillTertiary: '--lobe-overlay-fill-tertiary',
+  colorPrimary: '--lobe-overlay-primary',
+  colorPrimaryActive: '--lobe-overlay-primary-active',
+  colorPrimaryHover: '--lobe-overlay-primary-hover',
+  colorText: '--lobe-overlay-text',
+  colorTextLightSolid: '--lobe-overlay-text-light-solid',
+  colorTextQuaternary: '--lobe-overlay-text-quaternary',
+  colorTextSecondary: '--lobe-overlay-text-secondary',
+  colorTextTertiary: '--lobe-overlay-text-tertiary',
+  panelBorder: '--lobe-overlay-panel-border',
+  panelShadow: '--lobe-overlay-shadow',
+} as const;
+
+const v = (name: string) => `var(${name})`;
+
+const font = {
+  mono: "'SF Mono', ui-monospace, Menlo, monospace",
+  system:
+    "'SF Pro Display', 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+} as const;
+
+const radius = {
+  button: 8,
+  chip: 12,
+  kbd: 4,
+  panel: 12,
+  thumb: 6,
+} as const;
+
+const motion = {
+  enter: 'cubic-bezier(0.22, 1, 0.36, 1)',
+  spring: 'cubic-bezier(0.32, 0.72, 0, 1)',
 } as const;
 
 export const panel = style({
-  background: theme.color.panelBackground,
-  backdropFilter: 'blur(14px)',
-  WebkitBackdropFilter: 'blur(14px)',
-  border: `1px solid ${theme.color.divider}`,
-  borderRadius: theme.radius.panel,
-  boxShadow: theme.shadow.panel,
-  color: theme.color.panelText,
-  fontFamily: theme.font.system,
-  overflow: 'hidden',
-  pointerEvents: 'auto',
-  position: 'fixed',
-  transition: `left 420ms ${theme.motion.spring}, top 420ms ${theme.motion.spring}, width 320ms ${theme.motion.enter}`,
-  willChange: 'left, top, width',
-  zIndex: 20,
+  'background': v(vars.colorBgElevated),
+  'backdropFilter': 'blur(14px)',
+  'WebkitBackdropFilter': 'blur(14px)',
+  'border': `1px solid ${v(vars.panelBorder)}`,
+  'borderRadius': radius.panel,
+  'boxShadow': v(vars.panelShadow),
+  'color': v(vars.colorText),
+  'fontFamily': font.system,
+  'overflow': 'hidden',
+  'pointerEvents': 'auto',
+  'position': 'fixed',
+  'transition': `left 420ms ${motion.spring}, top 420ms ${motion.spring}, width 320ms ${motion.enter}`,
+  'willChange': 'left, top, width',
+  'zIndex': 20,
+  'vars': {
+    [vars.colorBgElevated]: '#ffffff',
+    [vars.colorBorderSecondary]: '#eeeeee',
+    [vars.colorFill]: 'rgba(0, 0, 0, 0.12)',
+    [vars.colorFillSecondary]: 'rgba(0, 0, 0, 0.06)',
+    [vars.colorFillTertiary]: 'rgba(0, 0, 0, 0.03)',
+    [vars.colorFillQuaternary]: 'rgba(0, 0, 0, 0.015)',
+    [vars.colorPrimary]: '#222222',
+    [vars.colorPrimaryActive]: '#111111',
+    [vars.colorPrimaryHover]: '#333333',
+    [vars.colorText]: '#080808',
+    [vars.colorTextLightSolid]: '#f8f8f8',
+    [vars.colorTextSecondary]: '#666666',
+    [vars.colorTextTertiary]: '#999999',
+    [vars.colorTextQuaternary]: '#bbbbbb',
+    [vars.panelBorder]: 'rgba(0, 0, 0, 0.12)',
+    [vars.panelShadow]: '0 4px 4px color-mix(in srgb, #000 4%, transparent)',
+  },
+  '@media': {
+    '(prefers-color-scheme: dark)': {
+      vars: {
+        [vars.colorBgElevated]: '#1a1a1a',
+        [vars.colorBorderSecondary]: '#1a1a1a',
+        [vars.colorFill]: 'rgba(255, 255, 255, 0.16)',
+        [vars.colorFillSecondary]: 'rgba(255, 255, 255, 0.1)',
+        [vars.colorFillTertiary]: 'rgba(255, 255, 255, 0.06)',
+        [vars.colorFillQuaternary]: 'rgba(255, 255, 255, 0.02)',
+        [vars.colorPrimary]: '#eeeeee',
+        [vars.colorPrimaryActive]: '#cccccc',
+        [vars.colorPrimaryHover]: '#ffffff',
+        [vars.colorText]: '#ffffff',
+        [vars.colorTextLightSolid]: '#000000',
+        [vars.colorTextSecondary]: '#aaaaaa',
+        [vars.colorTextTertiary]: '#6f6f6f',
+        [vars.colorTextQuaternary]: '#555555',
+        [vars.panelBorder]: 'rgba(255, 255, 255, 0.1)',
+        [vars.panelShadow]: '0 4px 4px color-mix(in srgb, #000 40%, transparent)',
+      },
+    },
+  },
 });
 
 export const selectionSummary = style({
   alignItems: 'center',
-  borderBottom: `1px solid ${theme.color.divider}`,
+  borderBottom: `1px solid ${v(vars.colorBorderSecondary)}`,
   display: 'flex',
-  gap: 12,
-  padding: '12px 14px',
+  gap: 10,
+  padding: '10px 12px',
 });
 
 export const thumb = style({
-  background: theme.color.thumbBackground,
+  background: v(vars.colorFillTertiary),
   backgroundPosition: 'center',
   backgroundSize: 'cover',
-  border: `1px solid ${theme.color.divider}`,
-  borderRadius: theme.radius.thumb,
+  border: `1px solid ${v(vars.colorBorderSecondary)}`,
+  borderRadius: radius.thumb,
   flexShrink: 0,
-  height: 48,
+  height: 40,
   overflow: 'hidden',
   position: 'relative',
-  width: 72,
+  width: 40,
 });
 
 export const summaryText = style({
   display: 'flex',
   flexDirection: 'column',
   flex: 1,
-  gap: 4,
+  gap: 2,
   minWidth: 0,
 });
 
 export const summaryTitle = style({
-  color: theme.color.panelText,
-  fontSize: 12,
+  color: v(vars.colorText),
+  fontSize: 13,
   fontWeight: 600,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -96,136 +138,228 @@ export const summaryTitle = style({
 });
 
 export const summaryMeta = style({
-  color: theme.color.panelSubtle,
-  fontFamily: theme.font.mono,
+  color: v(vars.colorTextQuaternary),
+  fontFamily: font.mono,
   fontSize: 11,
   letterSpacing: '0.01em',
 });
 
-export const summaryActions = style({
+export const iconBtn = style({
   alignItems: 'center',
-  display: 'flex',
-  gap: 8,
-});
-
-const buttonBase = {
-  alignItems: 'center',
-  background: theme.color.panelButton,
-  border: `1px solid ${theme.color.divider}`,
-  borderRadius: theme.radius.button,
-  color: theme.color.icon,
+  background: 'transparent',
+  border: 'none',
+  borderRadius: radius.button,
+  color: v(vars.colorTextSecondary),
   cursor: 'pointer',
   display: 'inline-flex',
+  height: 28,
   justifyContent: 'center',
-  transition: `background 120ms ease, color 120ms ease, transform 140ms ${theme.motion.spring}` as const,
+  transition: `background 120ms ease, color 120ms ease`,
+  width: 28,
   selectors: {
     '&:hover': {
-      background: theme.color.panelButtonHover,
-      color: theme.color.iconHover,
+      background: v(vars.colorFillSecondary),
+      color: v(vars.colorText),
     },
-    '&:active': { transform: 'scale(0.97)' },
+    '&:active': { background: v(vars.colorFill) },
   },
-} as const;
-
-export const iconBtn = style({
-  ...buttonBase,
-  height: 32,
-  width: 32,
-});
-
-export const secondaryBtn = style({
-  ...buttonBase,
-  fontSize: 12,
-  fontWeight: 550,
-  gap: 6,
-  height: 32,
-  padding: '0 10px',
 });
 
 export const inputRow = style({
-  alignItems: 'flex-end',
   display: 'flex',
-  gap: 12,
-  padding: '14px 14px 12px',
+  padding: '10px 12px 4px',
 });
 
 export const textarea = style({
   background: 'transparent',
   border: 'none',
-  color: theme.color.panelText,
+  color: v(vars.colorText),
   display: 'block',
   fontFamily: 'inherit',
   flex: 1,
   fontSize: 14,
   lineHeight: 1.5,
   maxHeight: 160,
-  minHeight: 48,
+  minHeight: 44,
   outline: 'none',
   padding: 0,
   resize: 'none',
   selectors: {
-    '&::placeholder': { color: theme.color.panelSubtle },
+    '&::placeholder': { color: v(vars.colorTextTertiary) },
   },
+});
+
+export const actionBar = style({
+  alignItems: 'center',
+  display: 'flex',
+  gap: 8,
+  padding: '4px 8px 8px 10px',
+});
+
+export const actionBarLeft = style({
+  alignItems: 'center',
+  display: 'flex',
+  flex: 1,
+  gap: 4,
+  minWidth: 0,
+});
+
+export const actionBarRight = style({
+  alignItems: 'center',
+  display: 'flex',
+  flexShrink: 0,
+  gap: 8,
+});
+
+export const selectChip = style({
+  alignItems: 'center',
+  background: v(vars.colorFillTertiary),
+  border: 'none',
+  borderRadius: radius.chip,
+  color: v(vars.colorText),
+  cursor: 'pointer',
+  display: 'inline-flex',
+  fontSize: 12,
+  fontWeight: 500,
+  gap: 6,
+  height: 32,
+  maxWidth: 180,
+  minWidth: 0,
+  padding: '0 10px 0 6px',
+  position: 'relative',
+  transition: 'background 120ms ease',
+  selectors: {
+    '&:hover': {
+      background: v(vars.colorFillSecondary),
+    },
+  },
+});
+
+export const selectChipDisabled = style({
+  cursor: 'not-allowed',
+  opacity: 0.55,
+  selectors: {
+    '&:hover': {
+      background: v(vars.colorFillTertiary),
+    },
+  },
+});
+
+export const chipLabel = style({
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+export const chevron = style({
+  color: v(vars.colorTextQuaternary),
+  flexShrink: 0,
+});
+
+export const nativeSelect = style({
+  appearance: 'none',
+  background: 'transparent',
+  border: 'none',
+  color: 'transparent',
+  cursor: 'pointer',
+  fontSize: 'inherit',
+  inset: 0,
+  margin: 0,
+  opacity: 0,
+  outline: 'none',
+  padding: 0,
+  position: 'absolute',
+  width: '100%',
+  selectors: {
+    '&:disabled': { cursor: 'not-allowed' },
+  },
+});
+
+export const modelIconBox = style({
+  alignItems: 'center',
+  display: 'inline-flex',
+  flexShrink: 0,
+  height: 20,
+  justifyContent: 'center',
+  width: 20,
+});
+
+export const modelIconBoxFallback = style({
+  background: v(vars.colorFillSecondary),
+  borderRadius: 5,
+  flexShrink: 0,
+  height: 20,
+  width: 20,
+});
+
+export const shortcutHint = style({
+  alignItems: 'center',
+  color: v(vars.colorTextQuaternary),
+  display: 'inline-flex',
+  fontSize: 11,
+  gap: 4,
+  userSelect: 'none',
+});
+
+export const shortcutKbd = style({
+  alignItems: 'center',
+  background: v(vars.colorFillQuaternary),
+  border: `1px solid ${v(vars.colorBorderSecondary)}`,
+  borderRadius: radius.kbd,
+  color: v(vars.colorTextSecondary),
+  display: 'inline-flex',
+  fontFamily: font.mono,
+  fontSize: 10,
+  fontWeight: 500,
+  height: 16,
+  justifyContent: 'center',
+  minWidth: 16,
+  padding: '0 4px',
 });
 
 export const sendBtn = style({
   alignItems: 'center',
-  alignSelf: 'stretch',
-  background: theme.color.panelPrimary,
-  border: 'none',
-  borderRadius: theme.radius.button,
-  color: theme.color.panelPrimaryText,
+  background: v(vars.colorPrimary),
+  border: `1px solid ${v(vars.colorPrimary)}`,
+  borderRadius: 8,
+  color: v(vars.colorTextLightSolid),
   cursor: 'pointer',
   display: 'inline-flex',
-  height: 40,
+  flexShrink: 0,
+  height: 32,
   justifyContent: 'center',
-  transition: `background 120ms ease, transform 140ms ${theme.motion.spring}`,
-  width: 40,
+  transition: `background 120ms ease, border-color 120ms ease, color 120ms ease, transform 140ms ${motion.spring}`,
+  width: 32,
   selectors: {
-    '&:hover': { background: theme.color.panelPrimaryHover, transform: 'translateY(-1px)' },
-    '&:active': { transform: 'scale(0.94)' },
-    '&:disabled': { cursor: 'not-allowed', opacity: 0.5, transform: 'none' },
+    '&:hover:not(:disabled)': {
+      background: v(vars.colorPrimaryHover),
+      borderColor: v(vars.colorPrimaryHover),
+    },
+    '&:active:not(:disabled)': {
+      background: v(vars.colorPrimaryActive),
+      borderColor: v(vars.colorPrimaryActive),
+      transform: 'scale(0.94)',
+    },
+    '&:disabled': {
+      background: 'transparent',
+      borderColor: v(vars.colorBorderSecondary),
+      color: v(vars.colorTextQuaternary),
+      cursor: 'not-allowed',
+    },
   },
 });
 
-export const footer = style({
-  alignItems: 'center',
-  background: theme.color.footerBackground,
-  borderTop: `1px solid ${theme.color.divider}`,
-  color: theme.color.panelMuted,
-  display: 'flex',
-  fontSize: 11,
-  gap: 16,
-  justifyContent: 'center',
-  padding: '8px 14px 10px',
-});
-
-export const kbd = style({
-  background: '#fff',
-  border: `1px solid ${theme.color.divider}`,
-  borderBottomWidth: 2,
-  borderRadius: theme.radius.kbd,
-  color: theme.color.panelMuted,
-  display: 'inline-flex',
-  fontFamily: theme.font.mono,
-  fontSize: 10,
-  fontWeight: 600,
-  height: 16,
-  letterSpacing: '0.03em',
-  marginRight: 4,
-  padding: '0 5px',
-});
-
 export const connector = style({
-  background: theme.color.panelPrimary,
+  background: v(vars.colorPrimary),
   borderRadius: '50%',
-  boxShadow: theme.shadow.connector,
+  boxShadow: `0 0 0 4px ${v(vars.colorFillSecondary)}, 0 0 16px ${v(vars.colorPrimary)}`,
   height: OVERLAY_LAYOUT.connectorSize,
   opacity: 0,
   pointerEvents: 'none',
   position: 'fixed',
-  transition:
-    `opacity 200ms ${theme.motion.enter} 140ms, left 320ms ${theme.motion.spring}, top 320ms ${theme.motion.spring}`,
+  transition: `opacity 200ms ${motion.enter} 140ms, left 320ms ${motion.spring}, top 320ms ${motion.spring}`,
   width: OVERLAY_LAYOUT.connectorSize,
   zIndex: 15,
 });
@@ -234,16 +368,27 @@ export const connectorVisible = style({
   opacity: 1,
 });
 
+export const connectorHidden = style({
+  opacity: 0,
+  transitionDelay: '0ms',
+  visibility: 'hidden',
+});
+
 const fadeIn = keyframes({
   from: { opacity: 0, transform: 'translate(-50%, 8px)' },
   to: { opacity: 1, transform: 'translate(-50%, 0)' },
 });
 
 export const initialEnter = style({
-  animation: `${fadeIn} 280ms ${theme.motion.enter}`,
+  animation: `${fadeIn} 280ms ${motion.enter}`,
 });
 
-// highlight overlay text when dragging inside textarea
+export const panelHidden = style({
+  opacity: 0,
+  pointerEvents: 'none',
+  visibility: 'hidden',
+});
+
 globalStyle(`.${textarea}::selection`, {
-  background: 'rgba(37, 99, 235, 0.18)',
+  background: 'color-mix(in srgb, var(--lobe-overlay-primary) 22%, transparent)',
 });
