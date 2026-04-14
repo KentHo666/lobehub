@@ -86,5 +86,6 @@
   "window.minimize": "Minimize",
   "window.title": "Window",
   "window.toggleFullscreen": "Toggle Fullscreen",
-  "window.zoom": "Zoom"
+  "window.zoom": "Zoom",
+  "tray.openMiniToolbar": "Open Mini Toolbar"
 }

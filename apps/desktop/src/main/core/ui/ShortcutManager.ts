@@ -4,9 +4,17 @@ import { DEFAULT_SHORTCUTS_CONFIG } from '@/shortcuts';
 import { createLogger } from '@/utils/logger';
 
 import type { App } from '../App';
+import {
+  MacOSDoubleOptionMonitor,
+  MACOS_DOUBLE_OPTION_SHORTCUT,
+} from './MacOSDoubleOptionMonitor';
 
 // Create logger
 const logger = createLogger('core:ShortcutManager');
+
+const SHOW_APP_SHORTCUT_ID = 'showApp';
+
+const normalizeShortcutToken = (accelerator: string) => accelerator.trim().toLowerCase();
 
 export interface ShortcutUpdateResult {
   errorType?:
@@ -21,6 +29,7 @@ export interface ShortcutUpdateResult {
 
 export class ShortcutManager {
   private app: App;
+  private macOSDoubleOptionMonitor: MacOSDoubleOptionMonitor | null = null;
   private shortcuts: Map<string, () => void> = new Map();
   private shortcutsConfig: Record<string, string> = {};
 
@@ -97,6 +106,37 @@ export class ShortcutManager {
         this.saveShortcutsConfig();
         this.registerConfiguredShortcuts();
         return { success: true };
+      }
+
+      if (this.isMacOSDoubleOptionShortcut(id, trimmedAccelerator)) {
+        for (const [existingId, existingAccelerator] of Object.entries(this.shortcutsConfig)) {
+          if (
+            existingId !== id &&
+            typeof existingAccelerator === 'string' &&
+            normalizeShortcutToken(existingAccelerator) ===
+              normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
+          ) {
+            logger.error(
+              `Shortcut conflict: ${MACOS_DOUBLE_OPTION_SHORTCUT} already used by ${existingId}`,
+            );
+            return { errorType: 'CONFLICT', success: false };
+          }
+        }
+
+        this.shortcutsConfig[id] = MACOS_DOUBLE_OPTION_SHORTCUT;
+        this.saveShortcutsConfig();
+        this.registerConfiguredShortcuts();
+        return { success: true };
+      }
+
+      if (
+        normalizeShortcutToken(trimmedAccelerator) ===
+        normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
+      ) {
+        logger.error(
+          `Invalid accelerator format: ${trimmedAccelerator}. ${MACOS_DOUBLE_OPTION_SHORTCUT} is only available for ${SHOW_APP_SHORTCUT_ID} on macOS`,
+        );
+        return { errorType: 'INVALID_FORMAT', success: false };
       }
 
       // Convert frontend format to Electron format
@@ -216,6 +256,8 @@ export class ShortcutManager {
    * Unregister all shortcuts
    */
   unregisterAll(): void {
+    this.macOSDoubleOptionMonitor?.stop();
+    this.macOSDoubleOptionMonitor = null;
     globalShortcut.unregisterAll();
     logger.info('Unregistered all shortcuts');
   }
@@ -303,8 +345,32 @@ export class ShortcutManager {
 
       const method = this.shortcuts.get(id);
       if (accelerator && method) {
+        if (this.isMacOSDoubleOptionShortcut(id, accelerator)) {
+          this.macOSDoubleOptionMonitor = new MacOSDoubleOptionMonitor(method);
+          this.macOSDoubleOptionMonitor.start();
+          return;
+        }
+
+        if (
+          normalizeShortcutToken(accelerator) ===
+          normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
+        ) {
+          logger.warn(
+            `Skipping shortcut '${id}' - ${MACOS_DOUBLE_OPTION_SHORTCUT} is only supported for ${SHOW_APP_SHORTCUT_ID} on macOS`,
+          );
+          return;
+        }
+
         this.registerShortcut(accelerator, method);
       }
     });
+  }
+
+  private isMacOSDoubleOptionShortcut(id: string, accelerator: string) {
+    return (
+      process.platform === 'darwin' &&
+      id === SHOW_APP_SHORTCUT_ID &&
+      normalizeShortcutToken(accelerator) === normalizeShortcutToken(MACOS_DOUBLE_OPTION_SHORTCUT)
+    );
   }
 }

@@ -86,5 +86,6 @@
   "window.minimize": "最小化",
   "window.title": "窗口",
   "window.toggleFullscreen": "切换全屏",
-  "window.zoom": "缩放"
+  "window.zoom": "缩放",
+  "tray.openMiniToolbar": "唤起小窗"
 }

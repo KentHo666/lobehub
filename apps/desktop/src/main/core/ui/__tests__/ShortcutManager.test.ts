@@ -6,6 +6,13 @@ import { DEFAULT_SHORTCUTS_CONFIG } from '@/shortcuts';
 import type { App } from '../../App';
 import { ShortcutManager } from '../ShortcutManager';
 
+const { mockDoubleOptionMonitorStart, mockDoubleOptionMonitorStop, mockMonitorConstructor } =
+  vi.hoisted(() => ({
+    mockDoubleOptionMonitorStart: vi.fn(),
+    mockDoubleOptionMonitorStop: vi.fn(),
+    mockMonitorConstructor: vi.fn(),
+  }));
+
 // Mock electron
 vi.mock('electron', () => ({
   globalShortcut: {
@@ -29,9 +36,17 @@ vi.mock('@/utils/logger', () => ({
 // Mock DEFAULT_SHORTCUTS_CONFIG
 vi.mock('@/shortcuts', () => ({
   DEFAULT_SHORTCUTS_CONFIG: {
-    showApp: 'Control+E',
+    showApp: 'doubleOption',
     openSettings: 'CommandOrControl+,',
   },
+}));
+
+vi.mock('../MacOSDoubleOptionMonitor', () => ({
+  MACOS_DOUBLE_OPTION_SHORTCUT: 'doubleOption',
+  MacOSDoubleOptionMonitor: mockMonitorConstructor.mockImplementation(() => ({
+    start: mockDoubleOptionMonitorStart,
+    stop: mockDoubleOptionMonitorStop,
+  })),
 }));
 
 describe('ShortcutManager', () => {
@@ -48,6 +63,9 @@ describe('ShortcutManager', () => {
     vi.mocked(globalShortcut.unregister).mockReturnValue(undefined);
     vi.mocked(globalShortcut.unregisterAll).mockReturnValue(undefined);
     vi.mocked(globalShortcut.isRegistered).mockReturnValue(false);
+    mockDoubleOptionMonitorStart.mockReset();
+    mockDoubleOptionMonitorStop.mockReset();
+    mockMonitorConstructor.mockClear();
 
     // Mock store manager
     mockStoreManager = {
@@ -115,11 +133,12 @@ describe('ShortcutManager', () => {
 
       expect(mockStoreManager.get).toHaveBeenCalledWith('shortcuts');
       expect(globalShortcut.unregisterAll).toHaveBeenCalled();
-      expect(globalShortcut.register).toHaveBeenCalledWith('Control+E', expect.any(Function));
       expect(globalShortcut.register).toHaveBeenCalledWith(
         'CommandOrControl+,',
         expect.any(Function),
       );
+      expect(mockMonitorConstructor).toHaveBeenCalledTimes(1);
+      expect(mockDoubleOptionMonitorStart).toHaveBeenCalledTimes(1);
     });
 
     it('should handle stored config with filtering', () => {
@@ -166,6 +185,20 @@ describe('ShortcutManager', () => {
           showApp: 'Alt+E',
         }),
       );
+    });
+
+    it('should accept the macOS double Option shortcut token', () => {
+      const result = shortcutManager.updateShortcutConfig('showApp', 'doubleOption');
+
+      expect(result.success).toBe(true);
+      expect(result.errorType).toBeUndefined();
+      expect(mockStoreManager.set).toHaveBeenCalledWith(
+        'shortcuts',
+        expect.objectContaining({
+          showApp: 'doubleOption',
+        }),
+      );
+      expect(mockDoubleOptionMonitorStart).toHaveBeenCalled();
     });
 
     it('should reject invalid shortcut ID', () => {
@@ -334,8 +367,15 @@ describe('ShortcutManager', () => {
 
   describe('unregisterAll', () => {
     it('should unregister all shortcuts', () => {
+      shortcutManager['shortcutsConfig'] = {
+        showApp: 'doubleOption',
+        openSettings: 'Ctrl+P',
+      };
+      shortcutManager['registerConfiguredShortcuts']();
+
       shortcutManager.unregisterAll();
 
+      expect(mockDoubleOptionMonitorStop).toHaveBeenCalled();
       expect(globalShortcut.unregisterAll).toHaveBeenCalled();
     });
   });
@@ -458,6 +498,23 @@ describe('ShortcutManager', () => {
       expect(globalShortcut.register).toHaveBeenCalledWith('Ctrl+P', expect.any(Function));
     });
 
+    it('should use the macOS double Option monitor for the special shortcut token', () => {
+      shortcutManager['shortcutsConfig'] = {
+        showApp: 'doubleOption',
+        openSettings: 'Ctrl+P',
+      };
+
+      shortcutManager['registerConfiguredShortcuts']();
+
+      expect(mockMonitorConstructor).toHaveBeenCalledTimes(1);
+      expect(mockDoubleOptionMonitorStart).toHaveBeenCalledTimes(1);
+      expect(globalShortcut.register).toHaveBeenCalledWith('Ctrl+P', expect.any(Function));
+      expect(globalShortcut.register).not.toHaveBeenCalledWith(
+        'doubleOption',
+        expect.any(Function),
+      );
+    });
+
     it('should skip shortcuts not in DEFAULT_SHORTCUTS_CONFIG', () => {
       shortcutManager['shortcutsConfig'] = {
         showApp: 'Alt+E',
@@ -540,6 +597,16 @@ describe('ShortcutManager', () => {
         'CommandOrControl+alt+E',
         expect.any(Function),
       );
+    });
+
+    it('should re-register the macOS double Option monitor after resetting to default', () => {
+      mockStoreManager.get.mockReturnValue({});
+      shortcutManager.initialize();
+
+      const result = shortcutManager.updateShortcutConfig('showApp', 'doubleOption');
+
+      expect(result.success).toBe(true);
+      expect(mockDoubleOptionMonitorStart).toHaveBeenCalledTimes(2);
     });
   });
 });

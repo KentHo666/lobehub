@@ -12,6 +12,7 @@ import { BaseMenuPlatform } from './BaseMenuPlatform';
 
 export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
   private appMenu: Menu | null = null;
+  private dockMenu: Menu | null = null;
   private trayMenu: Menu | null = null;
 
   buildAndSetAppMenu(options?: MenuOptions): Menu {
@@ -20,6 +21,7 @@ export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
     this.appMenu = Menu.buildFromTemplate(template);
 
     Menu.setApplicationMenu(this.appMenu);
+    this.buildAndSetDockMenu();
 
     return this.appMenu;
   }
@@ -148,7 +150,7 @@ export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
           {
             accelerator: 'Shift+Command+X',
             click: () => this.app.screenCaptureManager.startSession(),
-            label: t('tray.captureScreen'),
+            label: t('tray.openMiniToolbar'),
           },
           { type: 'separator' },
           { label: t('window.close'), role: 'close' },
@@ -659,7 +661,7 @@ export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
       },
       {
         click: () => this.app.screenCaptureManager.startSession(),
-        label: t('tray.captureScreen'),
+        label: t('tray.openMiniToolbar'),
       },
       {
         click: async () => {
@@ -671,6 +673,29 @@ export class MacOSMenu extends BaseMenuPlatform implements IMenuPlatform {
       },
       { type: 'separator' },
       { label: t('tray.quit'), role: 'quit' },
+    ];
+  }
+
+  private buildAndSetDockMenu() {
+    if (!app.dock?.setMenu) return;
+
+    this.dockMenu = Menu.buildFromTemplate(this.getDockMenuTemplate());
+    app.dock.setMenu(this.dockMenu);
+  }
+
+  private getDockMenuTemplate(): MenuItemConstructorOptions[] {
+    const t = this.app.i18n.ns('menu');
+    const appName = app.getName();
+
+    return [
+      {
+        click: () => this.app.browserManager.showMainWindow(),
+        label: t('tray.show', { appName }),
+      },
+      {
+        click: () => this.app.screenCaptureManager.startSession(),
+        label: t('tray.openMiniToolbar'),
+      },
     ];
   }
 }

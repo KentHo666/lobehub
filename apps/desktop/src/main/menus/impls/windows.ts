@@ -442,7 +442,7 @@ export class WindowsMenu extends BaseMenuPlatform implements IMenuPlatform {
       },
       {
         click: () => this.app.screenCaptureManager.startSession(),
-        label: t('tray.captureScreen'),
+        label: t('tray.openMiniToolbar'),
       },
       { type: 'separator' },
       {

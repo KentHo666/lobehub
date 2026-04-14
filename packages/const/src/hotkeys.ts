@@ -9,6 +9,24 @@ import {
 
 const combineKeys = (keys: string[]) => keys.join('+');
 
+const isMacOSDesktopPlatform = () => {
+  if (typeof navigator !== 'undefined') {
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
+        ?.platform ||
+      navigator.platform ||
+      navigator.userAgent ||
+      '';
+
+    return /mac/i.test(platform);
+  }
+
+  return typeof process !== 'undefined' && process.platform === 'darwin';
+};
+
+const resolveDesktopShowAppDefaultKeys = () =>
+  isMacOSDesktopPlatform() ? 'doubleOption' : combineKeys([KeyEnum.Ctrl, 'e']);
+
 export type HotkeyRegistration = HotkeyItem[];
 
 // mod is the command key on Mac, alt is the ctrl key on Windows
@@ -127,7 +145,7 @@ type DesktopHotkeyRegistration = DesktopHotkeyItem[];
 export const DESKTOP_HOTKEYS_REGISTRATION: DesktopHotkeyRegistration = [
   {
     id: DesktopHotkeyEnum.ShowApp,
-    keys: combineKeys([KeyEnum.Ctrl, 'e']),
+    keys: resolveDesktopShowAppDefaultKeys(),
   },
   {
     id: DesktopHotkeyEnum.OpenSettings,
